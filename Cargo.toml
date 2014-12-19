@@ -3,3 +3,6 @@
 name = "EVImproved-rs"
 version = "0.0.1"
 authors = ["Antti Keränen <detegr@gmail.com>"]
+
+[dependencies.url]
+git = "https://github.com/servo/rust-url"

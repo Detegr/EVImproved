@@ -1,0 +1,3 @@
+{ "id": "1000001", "name": "T%C3%A4m%C3%A4%20on%20testi", "channel": "MTV3", "scrambled_channel": "false", "short_text": "", "description": "", "length": "5", "flength": "5 min", "start_time": "18.9.2013 12:35:00", "end_time": "18.9.2013 12:40:00", "has_started": "true", "has_ended": "true", "recorded": "true", "ready": "true", "is_wildcard": "true", "wildcard": "*testi*", "wildcard_channel": "MTV3", "url": "http://google.fi", "programviewid": "123456789", "recordingid": "987654321" }
+
+This is a test data file for recording info returned from Elisa Viihde
