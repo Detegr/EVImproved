@@ -5,7 +5,7 @@ use url::percent_encoding::percent_decode;
 use serialize::{Decodable,Decoder};
 
 #[allow(dead_code)]
-pub struct RecordingInfo {
+pub struct Recording {
     id : int,
     name : String,
     channel : String,
@@ -17,16 +17,24 @@ pub struct RecordingInfo {
     recordingid : int
 }
 
-macro_rules! json_field {
-    ($name:expr, $decoder:expr) => {
-        try!($decoder.read_struct_field($name, 0, |d| Decodable::decode(d)))
-    }
+#[deriving(Decodable)]
+#[allow(dead_code)]
+pub struct RecordingInfo {
+    id : int,
+    program_id : int,
+    folder_id : String, // TODO: Option<int>
+    name: String,
+    channel: String,
+    start_time: String, // TODO
+    timestamp: String, // TODO
+    viewcount: int,
+    length: int
 }
 
-impl<E, D : Decoder<E>> Decodable<D, E> for RecordingInfo {
-    fn decode(d: &mut D) -> Result<RecordingInfo, E> {
+impl<E, D : Decoder<E>> Decodable<D, E> for Recording {
+    fn decode(d: &mut D) -> Result<Recording, E> {
         d.read_struct("", 0, |d| {
-            Ok(RecordingInfo {
+            Ok(Recording {
                 id: json_field!("id", d),
                 name: {
                     let percent_encoded_str : String = json_field!("name", d);
@@ -45,7 +53,7 @@ impl<E, D : Decoder<E>> Decodable<D, E> for RecordingInfo {
 }
 
 #[allow(dead_code)]
-impl RecordingInfo {
+impl Recording {
     pub fn get_id(&self) -> int { self.id }
     pub fn get_name(&self) -> &str { self.name.as_slice() }
     pub fn get_channel(&self) -> &str { self.channel.as_slice() }
