@@ -2,7 +2,7 @@
 
 use url::Url;
 use url::percent_encoding::percent_decode;
-use serialize::{Decodable,Decoder};
+use rustc_serialize::{Decodable,Decoder};
 
 #[allow(dead_code)]
 pub struct Recording {
@@ -17,7 +17,7 @@ pub struct Recording {
     recordingid : int
 }
 
-#[deriving(Decodable)]
+#[deriving(RustcDecodable)]
 #[allow(dead_code)]
 pub struct RecordingInfo {
     id : int,

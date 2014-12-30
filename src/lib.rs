@@ -3,10 +3,10 @@
 #![feature(macro_rules)]
 
 extern crate url;
-extern crate serialize;
+extern crate "rustc-serialize" as rustc_serialize;
 
 #[cfg(test)]
-use serialize::json;
+use rustc_serialize::json;
 #[cfg(test)]
 use std::io::{BufferedReader, File};
 #[cfg(test)]
@@ -38,7 +38,7 @@ macro_rules! setup_test(
             }
         }
     }
-)
+);
 
 #[test]
 fn able_to_parse_recording() -> () {
