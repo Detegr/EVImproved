@@ -1,8 +1,20 @@
 /* vim: set et: */
 
+use std::fmt;
 use url::Url;
 use url::percent_encoding::percent_decode;
 use rustc_serialize::{Decodable,Decoder};
+
+pub enum ProgramId {
+    ProgramId(int)
+}
+impl fmt::Show for ProgramId {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            ProgramId::ProgramId(ref id) => write!(fmt, "{}", id)
+        }
+    }
+}
 
 #[allow(dead_code)]
 pub struct Recording {

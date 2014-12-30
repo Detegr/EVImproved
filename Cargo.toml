@@ -7,5 +7,8 @@ authors = ["Antti Keränen <detegr@gmail.com>"]
 [dependencies.url]
 git = "https://github.com/servo/rust-url"
 
+[dependencies.hyper]
+git = "https://github.com/Detegr/hyper" # Using my fork of hyper before they merge my pull request or fix them themselves
+
 [dependencies]
 rustc-serialize = "0.1.5"

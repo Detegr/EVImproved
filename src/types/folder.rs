@@ -1,7 +1,21 @@
 /* vim: set et: */
 
+use std::fmt;
 use super::recording::RecordingInfo;
 use rustc_serialize::{Decodable,Decoder};
+
+pub enum FolderId {
+    Root,
+    FolderId(int)
+}
+impl fmt::Show for FolderId {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            FolderId::Root => write!(fmt, "0"),
+            FolderId::FolderId(ref id) => write!(fmt, "{}", id)
+        }
+    }
+}
 
 #[allow(dead_code)]
 #[deriving(RustcDecodable)]

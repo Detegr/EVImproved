@@ -13,8 +13,11 @@ use std::io::{BufferedReader, File};
 use types::folder::Folder;
 #[cfg(test)]
 use types::recording::Recording;
+#[cfg(test)]
+use urls::EVUrl;
 
 mod types;
+mod urls;
 
 #[test]
 macro_rules! setup_test(
