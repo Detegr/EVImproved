@@ -47,3 +47,9 @@ fn show_program_url() {
     let url = EVUrl::Program(ProgramId::ProgramId(123));
     assert!(url.to_string() == "https://api.elisaviihde.fi/etvrecorder/program.sl?programid=123&ppos=0&ajax=true");
 }
+
+#[test]
+fn show_move_url() {
+    let url = EVUrl::Move(ProgramId::ProgramId(123), FolderId::FolderId(321));
+    assert!(url.to_string() == "https://api.elisaviihde.fi/etvrecorder/ready.sl?ajax=true&move=true&destination=321&programviewid=123");
+}
