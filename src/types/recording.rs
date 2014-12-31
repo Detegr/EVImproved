@@ -3,7 +3,12 @@
 use std::fmt;
 use url::Url;
 use url::percent_encoding::percent_decode;
-use rustc_serialize::{Decodable,Decoder};
+
+#[allow(unused_imports)]
+use rustc_serialize::{json,Decodable,Decoder};
+
+#[cfg(test)]
+use std::io::{BufferedReader, File};
 
 pub enum ProgramId {
     ProgramId(int)
@@ -75,4 +80,19 @@ impl Recording {
     pub fn get_url(&self) -> &Url { &self.url }
     pub fn get_program_view_id(&self) -> int { self.programviewid }
     pub fn get_recording_id(&self) -> int { self.recordingid }
+}
+
+#[test]
+fn able_to_parse_recording() -> () {
+    setup_test!("testdata/recording.json", |r : Recording| {
+        assert!(r.get_id() == 1000001);
+        assert!(r.get_name() == "Tämä on testi"); // Finnish characters used on purpose
+        assert!(r.get_channel() == "MTV3");
+        assert!(r.get_length() == 5);
+        // start_time
+        // end_time
+        assert!(r.get_url().to_string() == "http://google.fi/");
+        assert!(r.get_program_view_id() == 123456789);
+        assert!(r.get_recording_id() == 987654321);
+    });
 }

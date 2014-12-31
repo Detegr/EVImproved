@@ -1,8 +1,13 @@
 /* vim: set et: */
 
 use std::fmt;
-use super::recording::RecordingInfo;
-use rustc_serialize::{Decodable,Decoder};
+use super::recording::{Recording,RecordingInfo};
+
+#[allow(unused_imports)]
+use rustc_serialize::{json,Decodable,Decoder};
+
+#[cfg(test)]
+use std::io::{BufferedReader, File};
 
 pub enum FolderId {
     Root,
@@ -56,4 +61,10 @@ impl<E, D : Decoder<E>> Decodable<D, E> for Folder {
             }).or(Folder::decode_folder(d))
         })
     }
+}
+
+#[test]
+fn able_to_parse_readydata() -> () {
+    setup_test!("testdata/readydata.json", |_ : Folder| {
+    });
 }
