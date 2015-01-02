@@ -23,7 +23,7 @@ impl fmt::Show for FolderId {
 }
 
 #[allow(dead_code)]
-#[deriving(RustcDecodable)]
+#[deriving(Clone, RustcDecodable)]
 pub struct FolderInfo {
     id: int,
     name: String,
@@ -68,21 +68,35 @@ impl<'a> Folder {
     fn get_id(&self) -> int {
         self.info.id
     }
-    fn folder_iter(&'a self) -> FolderIter<'a> {
+    pub fn folder_iter(&'a self) -> FolderIter<'a> {
         FolderIter { index: 0, folder: self }
     }
-    fn rec_iter(&'a self) -> RecordingIter<'a> {
+    pub fn rec_iter(&'a self) -> RecordingIter<'a> {
         RecordingIter { index: 0, folder: self }
+    }
+    #[cfg(not(test))]
+    fn fetch_folder(&self, fi: &FolderInfo) -> Option<Folder> {
+        None // NYI
+    }
+    #[cfg(test)]
+    fn fetch_folder(&self, fi: &FolderInfo) -> Option<Folder> {
+        let path = &Path::new(format!("testdata/folder_{}.json", fi.id));
+        let line = BufferedReader::new(File::open(path)).read_line().unwrap();
+        let mut fldr: Folder = json::decode(line.as_slice()).unwrap();
+        fldr.info = fi.clone();
+        Some(fldr)
     }
 }
 
 impl<'a> Iterator<Folder> for FolderIter<'a> {
+    #![cfg(test)]
     fn next(&mut self) -> Option<Folder> {
-        assert!(self.index < self.folder.folders.len());
+        if self.index >= self.folder.folders.len() {
+            return None
+        }
         let fi = &self.folder.folders[self.index];
         self.index += 1;
-        // TODO: Fetch folder using fi
-        None
+        self.folder.fetch_folder(fi)
     }
     fn size_hint(&self) -> (uint, Option<uint>) {
         (0, Some(self.folder.folders.len()))
@@ -113,32 +127,33 @@ impl<E, D : Decoder<E>> Folder {
 impl<E, D : Decoder<E>> Decodable<D, E> for Folder {
     fn decode(d: &mut D) -> Result<Folder, E> {
         d.read_struct("", 0, |d| {
-            // Try decoding ready_data first, if not found, decode normal folder
             d.read_struct_field("ready_data", 0, |rd| {
                 rd.read_seq(|rd, len| {
                     assert!(len==1);
                     rd.read_seq_elt(0, |rd| { Folder::decode_folder(rd) })
                 })
-            }).or(Folder::decode_folder(d))
+            })
         })
     }
 }
 
 #[test]
 fn able_to_parse_readydata() -> () {
-    setup_test!("testdata/readydata.json", |_ : Folder| {});
+    setup_test!("testdata/root_folder.json", |_ : Folder| {});
 }
 
 #[test]
 fn able_to_iterate_folders() -> () {
-    setup_test!("testdata/readydata.json", |f : Folder| {
-        println!("{}", f.folder_iter().size_hint());
-        assert!(f.folder_iter().size_hint() == (0, Some(2)));
+    setup_test!("testdata/root_folder.json", |f : Folder| {
+        assert!(f.folder_iter().size_hint() == (0, Some(2)), "Folder iterator had invalid bounds");
+        let mut has_items: bool = false;
         for fldr in f.folder_iter() {
+            has_items = true;
             match fldr.get_id() {
-                10000001 | 10000002 => {},
-                _ => assert!(false)
+                1000001 | 1000002 => {},
+                _ => assert!(false, "Folder id was invalid")
             }
         }
+        assert!(has_items, "Folder iterator should return some items but it returned none");
     });
 }
