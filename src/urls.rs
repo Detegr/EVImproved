@@ -24,32 +24,38 @@ impl fmt::Show for EVUrl {
     }
 }
 
-#[test]
-fn show_login_url() {
-    let url = EVUrl::Login;
-    assert!(url.to_string() == "https//api.elisaviihde.fi/etvrecorder/login.sl");
-}
+mod tests {
+    use super::EVUrl;
+    use types::folder::FolderId;
+    use types::recording::ProgramId;
 
-#[test]
-fn show_root_folder_url() {
-    let url = EVUrl::Folder(FolderId::Root);
-    assert!(url.to_string() == "https://api.elisaviihde.fi/etvrecorder/ready.sl?ajax=true");
-}
+    #[test]
+    fn show_login_url() {
+        let url = EVUrl::Login;
+        assert!(url.to_string() == "https//api.elisaviihde.fi/etvrecorder/login.sl");
+    }
 
-#[test]
-fn show_non_root_folder_url() {
-    let url = EVUrl::Folder(FolderId::FolderId(123));
-    assert!(url.to_string() == "https://api.elisaviihde.fi/etvrecorder/ready.sl?folderid=123&ppos=0&ajax=true");
-}
+    #[test]
+    fn show_root_folder_url() {
+        let url = EVUrl::Folder(FolderId::Root);
+        assert!(url.to_string() == "https://api.elisaviihde.fi/etvrecorder/ready.sl?ajax=true");
+    }
 
-#[test]
-fn show_program_url() {
-    let url = EVUrl::Program(ProgramId::ProgramId(123));
-    assert!(url.to_string() == "https://api.elisaviihde.fi/etvrecorder/program.sl?programid=123&ppos=0&ajax=true");
-}
+    #[test]
+    fn show_non_root_folder_url() {
+        let url = EVUrl::Folder(FolderId::FolderId(123));
+        assert!(url.to_string() == "https://api.elisaviihde.fi/etvrecorder/ready.sl?folderid=123&ppos=0&ajax=true");
+    }
 
-#[test]
-fn show_move_url() {
-    let url = EVUrl::Move(ProgramId::ProgramId(123), FolderId::FolderId(321));
-    assert!(url.to_string() == "https://api.elisaviihde.fi/etvrecorder/ready.sl?ajax=true&move=true&destination=321&programviewid=123");
+    #[test]
+    fn show_program_url() {
+        let url = EVUrl::Program(ProgramId::ProgramId(123));
+        assert!(url.to_string() == "https://api.elisaviihde.fi/etvrecorder/program.sl?programid=123&ppos=0&ajax=true");
+    }
+
+    #[test]
+    fn show_move_url() {
+        let url = EVUrl::Move(ProgramId::ProgramId(123), FolderId::FolderId(321));
+        assert!(url.to_string() == "https://api.elisaviihde.fi/etvrecorder/ready.sl?ajax=true&move=true&destination=321&programviewid=123");
+    }
 }

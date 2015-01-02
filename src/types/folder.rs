@@ -6,9 +6,6 @@ use super::recording::{Recording,RecordingInfo};
 #[allow(unused_imports)]
 use rustc_serialize::{json,Decodable,Decoder};
 
-#[cfg(test)]
-use std::io::{BufferedReader, File};
-
 pub enum FolderId {
     Root,
     FolderId(int)
@@ -80,6 +77,7 @@ impl<'a> Folder {
     }
     #[cfg(test)]
     fn fetch_folder(&self, fi: &FolderInfo) -> Option<Folder> {
+        use std::io::{BufferedReader, File};
         let path = &Path::new(format!("testdata/folder_{}.json", fi.id));
         let line = BufferedReader::new(File::open(path)).read_line().unwrap();
         let mut fldr: Folder = json::decode(line.as_slice()).unwrap();
@@ -137,23 +135,30 @@ impl<E, D : Decoder<E>> Decodable<D, E> for Folder {
     }
 }
 
-#[test]
-fn able_to_parse_readydata() -> () {
-    setup_test!("testdata/root_folder.json", |_ : Folder| {});
-}
+#[cfg(test)]
+mod tests {
+    use rustc_serialize::json;
+    use std::io::{BufferedReader, File};
+    use super::Folder;
 
-#[test]
-fn able_to_iterate_folders() -> () {
-    setup_test!("testdata/root_folder.json", |f : Folder| {
-        assert!(f.folder_iter().size_hint() == (0, Some(2)), "Folder iterator had invalid bounds");
-        let mut has_items: bool = false;
-        for fldr in f.folder_iter() {
-            has_items = true;
-            match fldr.get_id() {
-                1000001 | 1000002 => {},
-                _ => assert!(false, "Folder id was invalid")
+    #[test]
+    fn able_to_parse_readydata() -> () {
+        setup_test!("testdata/root_folder.json", |_ : Folder| {});
+    }
+
+    #[test]
+    fn able_to_iterate_folders() -> () {
+        setup_test!("testdata/root_folder.json", |f : Folder| {
+            assert!(f.folder_iter().size_hint() == (0, Some(2)), "Folder iterator had invalid bounds");
+            let mut has_items: bool = false;
+            for fldr in f.folder_iter() {
+                has_items = true;
+                match fldr.get_id() {
+                    1000001 | 1000002 => {},
+                    _ => assert!(false, "Folder id was invalid")
+                }
             }
-        }
-        assert!(has_items, "Folder iterator should return some items but it returned none");
-    });
+            assert!(has_items, "Folder iterator should return some items but it returned none");
+        });
+    }
 }
