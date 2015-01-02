@@ -1,7 +1,7 @@
 /* vim: set et: */
 
-use types::folder::FolderId;
-use types::recording::ProgramId;
+use types::FolderId;
+use types::ProgramId;
 use std::fmt;
 
 pub enum EVUrl {
@@ -26,8 +26,8 @@ impl fmt::Show for EVUrl {
 
 mod tests {
     use super::EVUrl;
-    use types::folder::FolderId;
-    use types::recording::ProgramId;
+    use types::FolderId;
+    use types::ProgramId;
 
     #[test]
     fn show_login_url() {
