@@ -31,7 +31,21 @@ pub struct FolderInfo {
     has_unwatched: String, // TODO: Boolean
     has_wildcards: String, // TODO: Boolean
     has_pin: String, // TODO: option<int>
-    recordings_count: int
+    recordings_count: uint
+}
+
+impl FolderInfo {
+    fn root(rec_count: uint) -> FolderInfo {
+        FolderInfo {
+            id: 0,
+            name: "Root".to_string(),
+            size: "0".to_string(),
+            has_unwatched: "false".to_string(),
+            has_wildcards: "false".to_string(),
+            has_pin: "false".to_string(),
+            recordings_count: rec_count
+        }
+    }
 }
 
 #[allow(dead_code)]
@@ -70,28 +84,28 @@ impl<'a> Iterator<Folder> for FolderIter<'a> {
         // TODO: Fetch folder using fi
         None
     }
+    fn size_hint(&self) -> (uint, Option<uint>) {
+        (0, Some(self.folder.folders.len()))
+    }
 }
+
 impl<'a> Iterator<Recording> for RecordingIter<'a> {
     fn next(&mut self) -> Option<Recording> {
-        assert!(self.index < self.folder.folders.len() + self.folder.recordings.len());
+        assert!(self.index < self.folder.recordings.len());
         None
+    }
+    fn size_hint(&self) -> (uint, Option<uint>) {
+        (0, Some(self.folder.recordings.len()))
     }
 }
 
 impl<E, D : Decoder<E>> Folder {
     fn decode_folder(d: &mut D) -> Result<Folder, E> {
+        let recordings: Vec<RecordingInfo> = json_field!("recordings", d);
         Ok(Folder {
-            info: FolderInfo { // TODO
-                id: 0,
-                name: "".to_string(),
-                size: "".to_string(),
-                has_unwatched: "".to_string(),
-                has_wildcards: "".to_string(),
-                has_pin: "".to_string(),
-                recordings_count: 0
-            },
+            info: FolderInfo::root(recordings.len()),
             folders: json_field!("folders", d),
-            recordings: json_field!("recordings", d),
+            recordings: recordings
         })
     }
 }
@@ -118,9 +132,13 @@ fn able_to_parse_readydata() -> () {
 #[test]
 fn able_to_iterate_folders() -> () {
     setup_test!("testdata/readydata.json", |f : Folder| {
-        assert!(f.folder_iter().size_hint() == (0, Some(1)));
+        println!("{}", f.folder_iter().size_hint());
+        assert!(f.folder_iter().size_hint() == (0, Some(2)));
         for fldr in f.folder_iter() {
-            assert!(fldr.get_id() == 10000001);
+            match fldr.get_id() {
+                10000001 | 10000002 => {},
+                _ => assert!(false)
+            }
         }
     });
 }
