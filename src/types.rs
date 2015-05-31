@@ -13,8 +13,8 @@ macro_rules! setup_test(
     ($filename:expr, $code:expr) => {
         match BufferedReader::new(File::open(&Path::new($filename))).read_line() {
             Ok(line) => {
-                println!("{}", line.as_slice());
-                match json::decode(line.as_slice()) {
+                println!("{}", line.as_ref());
+                match json::decode(line.as_ref()) {
                     Ok(res) => {
                         $code(res)
                     },
@@ -41,9 +41,9 @@ macro_rules! json_field {
 
 pub enum FolderId {
     Root,
-    FolderId(int)
+    FolderId(i32)
 }
-impl fmt::Show for FolderId {
+impl fmt::Display for FolderId {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             FolderId::Root => write!(fmt, "0"),
@@ -53,19 +53,31 @@ impl fmt::Show for FolderId {
 }
 
 #[allow(dead_code)]
-#[deriving(Clone, RustcDecodable)]
+#[derive(Clone, RustcDecodable)]
 pub struct FolderInfo {
-    id: int,
+    id: i32,
     name: String,
     size: String, // TODO: Floating point
     has_unwatched: String, // TODO: Boolean
     has_wildcards: String, // TODO: Boolean
     has_pin: String, // TODO: option<int>
-    recordings_count: uint
+    recordings_count: usize
 }
+/*
+impl<E, D : Decoder<E>> Decodable<D, E> for FolderInfo {
+    fn decode(d: &mut D) -> Result<Folder, E> {
+        let size_str = json_value!("size", d).words().next();
+        let size = Float::parse(size_str.as_ref());
+        Ok(FolderInfo {
+            id: json_value!("id", d),
+            name: json_value!("name", d),
+            size: size
+        })
+    }
+}*/
 
 impl FolderInfo {
-    fn root(rec_count: uint) -> FolderInfo {
+    fn root(rec_count: usize) -> FolderInfo {
         FolderInfo {
             id: 0,
             name: "Root".to_string(),
@@ -86,16 +98,16 @@ pub struct Folder {
 }
 
 pub struct FolderIter<'a> {
-    index: uint,
+    index: usize,
     folder: &'a Folder
 }
 pub struct RecordingIter<'a> {
-    index: uint,
+    index: usize,
     folder: &'a Folder
 }
 
 impl<'a> Folder {
-    fn get_id(&self) -> int {
+    fn get_id(&self) -> i32 {
         self.info.id
     }
     pub fn folder_iter(&'a self) -> FolderIter<'a> {
@@ -117,7 +129,7 @@ impl<'a> Folder {
         use std::io::{BufferedReader, File};
         let path = &Path::new(format!("testdata/folder_{}.json", fi.id));
         let line = BufferedReader::new(File::open(path)).read_line().unwrap();
-        let mut fldr: Folder = json::decode(line.as_slice()).unwrap();
+        let mut fldr: Folder = json::decode(line.as_ref()).unwrap();
         fldr.info = fi.clone();
         Some(fldr)
     }
@@ -126,7 +138,7 @@ impl<'a> Folder {
         use std::io::{BufferedReader, File};
         let path = &Path::new(format!("testdata/recording_{}.json", ri.program_id));
         let line = BufferedReader::new(File::open(path)).read_line().unwrap();
-        let mut rec: Recording = json::decode(line.as_slice()).unwrap();
+        let mut rec: Recording = json::decode(line.as_ref()).unwrap();
         rec.info = ri.clone();
         Some(rec)
     }
@@ -142,12 +154,13 @@ impl<'a> Iterator<Folder> for FolderIter<'a> {
         self.index += 1;
         self.folder.fetch_folder(fi)
     }
-    fn size_hint(&self) -> (uint, Option<uint>) {
+    fn size_hint(&self) -> (u32, Option<usize>) {
         (0, Some(self.folder.folders.len()))
     }
 }
 
-impl<'a> Iterator<Recording> for RecordingIter<'a> {
+impl<'a> Iterator for RecordingIter<'a> {
+    type Item = Recording;
     fn next(&mut self) -> Option<Recording> {
         if self.index >= self.folder.recordings.len() {
             return None
@@ -156,13 +169,13 @@ impl<'a> Iterator<Recording> for RecordingIter<'a> {
         self.index += 1;
         self.folder.fetch_recording(ri)
     }
-    fn size_hint(&self) -> (uint, Option<uint>) {
+    fn size_hint(&self) -> (usize, Option<usize>) {
         (0, Some(self.folder.recordings.len()))
     }
 }
 
-impl<E, D : Decoder<E>> Folder {
-    fn decode_folder(d: &mut D) -> Result<Folder, E> {
+impl Folder {
+    fn decode_folder<D : Decoder>(d: &mut D) -> Result<Folder, D::Error> {
         let recordings: Vec<RecordingInfo> = json_field!("recordings", d);
         Ok(Folder {
             info: FolderInfo::root(recordings.len()),
@@ -172,8 +185,8 @@ impl<E, D : Decoder<E>> Folder {
     }
 }
 
-impl<E, D : Decoder<E>> Decodable<D, E> for Folder {
-    fn decode(d: &mut D) -> Result<Folder, E> {
+impl Decodable for Folder {
+    fn decode<D : Decoder>(d: &mut D) -> Result<Folder, D::Error> {
         d.read_struct("", 0, |d| {
             d.read_struct_field("ready_data", 0, |rd| {
                 rd.read_seq(|rd, len| {
@@ -186,9 +199,9 @@ impl<E, D : Decoder<E>> Decodable<D, E> for Folder {
 }
 
 pub enum ProgramId {
-    ProgramId(int)
+    ProgramId(i32)
 }
-impl fmt::Show for ProgramId {
+impl fmt::Display for ProgramId {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             ProgramId::ProgramId(ref id) => write!(fmt, "{}", id)
@@ -199,29 +212,29 @@ impl fmt::Show for ProgramId {
 #[allow(dead_code)]
 pub struct Recording {
     info: RecordingInfo,
-    id : int,
+    id : i32,
     name : String,
     channel : String,
-    length : int,
+    length : i32,
     start_time : String,
     end_time : String,
     url : Url,
-    programviewid : int,
-    recordingid : int
+    programviewid : i32,
+    recordingid : i32
 }
 
-#[deriving(Clone, RustcDecodable)]
+#[derive(Clone, RustcDecodable)]
 #[allow(dead_code)]
 pub struct RecordingInfo {
-    id : int,
-    program_id : int,
+    id : i32,
+    program_id : i32,
     folder_id : String, // TODO: Option<int>
     name: String,
     channel: String,
     start_time: String, // TODO
     timestamp: String, // TODO
-    viewcount: int,
-    length: int
+    viewcount: i32,
+    length: i32
 }
 
 impl Default for RecordingInfo {
@@ -240,8 +253,8 @@ impl Default for RecordingInfo {
     }
 }
 
-impl<E, D : Decoder<E>> Decodable<D, E> for Recording {
-    fn decode(d: &mut D) -> Result<Recording, E> {
+impl Decodable for Recording {
+    fn decode<D : Decoder>(d: &mut D) -> Result<Recording, D::Error> {
         d.read_struct("", 0, |d| {
             Ok(Recording {
                 info: Default::default(),
@@ -264,15 +277,15 @@ impl<E, D : Decoder<E>> Decodable<D, E> for Recording {
 
 #[allow(dead_code)]
 impl Recording {
-    pub fn get_id(&self) -> int { self.id }
-    pub fn get_name(&self) -> &str { self.name.as_slice() }
-    pub fn get_channel(&self) -> &str { self.channel.as_slice() }
-    pub fn get_length(&self) -> int { self.length }
-    pub fn get_start_time(&self) -> &str { self.start_time.as_slice() } // TODO
-    pub fn get_end_time(&self) -> &str { self.end_time.as_slice() } // TODO
+    pub fn get_id(&self) -> i32 { self.id }
+    pub fn get_name(&self) -> &str { self.name.as_ref() }
+    pub fn get_channel(&self) -> &str { self.channel.as_ref() }
+    pub fn get_length(&self) -> i32 { self.length }
+    pub fn get_start_time(&self) -> &str { self.start_time.as_ref() } // TODO
+    pub fn get_end_time(&self) -> &str { self.end_time.as_ref() } // TODO
     pub fn get_url(&self) -> &Url { &self.url }
-    pub fn get_program_view_id(&self) -> int { self.programviewid }
-    pub fn get_recording_id(&self) -> int { self.recordingid }
+    pub fn get_program_view_id(&self) -> i32 { self.programviewid }
+    pub fn get_recording_id(&self) -> i32 { self.recordingid }
 }
 
 #[cfg(test)]

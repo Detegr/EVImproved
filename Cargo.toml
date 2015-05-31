@@ -4,11 +4,7 @@ name = "EVImproved-rs"
 version = "0.0.1"
 authors = ["Antti Keränen <detegr@gmail.com>"]
 
-[dependencies.url]
-git = "https://github.com/servo/rust-url"
-
-[dependencies.hyper]
-git = "https://github.com/hyperium/hyper"
-
 [dependencies]
-rustc-serialize = "0.1.5"
+rustc-serialize = "0.3.14"
+hyper = "0.5.1"
+url = "0.2"

@@ -10,7 +10,7 @@ pub enum EVUrl {
     Program(ProgramId),
     Move(ProgramId, FolderId)
 }
-impl fmt::Show for EVUrl {
+impl fmt::Display for EVUrl {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             EVUrl::Login => write!(fmt, "https//api.elisaviihde.fi/etvrecorder/login.sl"),
