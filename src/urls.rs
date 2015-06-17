@@ -1,5 +1,7 @@
 /* vim: set et: */
 
+use url;
+use hyper;
 use types::FolderId;
 use types::ProgramId;
 use std::fmt;
@@ -10,10 +12,19 @@ pub enum EVUrl {
     Program(ProgramId),
     Move(ProgramId, FolderId)
 }
+
+impl hyper::client::IntoUrl for EVUrl {
+    fn into_url(self) -> Result<url::Url, url::ParseError> {
+        // TODO: Implement Into<String> for EVUrl
+        let s: String = self.to_string();
+        url::Url::parse(&s)
+    }
+}
+
 impl fmt::Display for EVUrl {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            EVUrl::Login => write!(fmt, "https//api.elisaviihde.fi/etvrecorder/login.sl"),
+            EVUrl::Login => write!(fmt, "https://api.elisaviihde.fi/etvrecorder/login.sl"),
             EVUrl::Folder(ref id) => match *id {
                 FolderId::Root => write!(fmt, "https://api.elisaviihde.fi/etvrecorder/ready.sl?ajax=true"),
                 ref id => write!(fmt, "https://api.elisaviihde.fi/etvrecorder/ready.sl?folderid={}&ppos=0&ajax=true", id),
@@ -32,7 +43,7 @@ mod tests {
     #[test]
     fn show_login_url() {
         let url = EVUrl::Login;
-        assert!(url.to_string() == "https//api.elisaviihde.fi/etvrecorder/login.sl");
+        assert!(url.to_string() == "https://api.elisaviihde.fi/etvrecorder/login.sl");
     }
 
     #[test]

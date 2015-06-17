@@ -4,33 +4,12 @@ use std::default::Default;
 use std::fmt;
 use url::Url;
 use url::percent_encoding::percent_decode;
+use std::fs::File;
+use std::path::PathBuf;
+use std::io::BufRead;
 
 #[allow(unused_imports)]
 use rustc_serialize::{json,Decodable,Decoder};
-
-#[cfg(test)]
-macro_rules! setup_test(
-    ($filename:expr, $code:expr) => {
-        match BufferedReader::new(File::open(&Path::new($filename))).read_line() {
-            Ok(line) => {
-                println!("{}", line.as_ref());
-                match json::decode(line.as_ref()) {
-                    Ok(res) => {
-                        $code(res)
-                    },
-                    Err(err) => {
-                        println!("{}", err);
-                        assert!(false);
-                    }
-                };
-            },
-            Err(err) => {
-                println!("{}", err);
-                assert!(false);
-            }
-        }
-    }
-);
 
 macro_rules! json_field {
     ($name:expr, $decoder:expr) => {
@@ -38,7 +17,7 @@ macro_rules! json_field {
     }
 }
 
-
+/// Describes an id of an folder
 pub enum FolderId {
     Root,
     FolderId(i32)
@@ -52,6 +31,7 @@ impl fmt::Display for FolderId {
     }
 }
 
+/// Contains information of a folder
 #[allow(dead_code)]
 #[derive(Clone, RustcDecodable)]
 pub struct FolderInfo {
@@ -90,6 +70,7 @@ impl FolderInfo {
     }
 }
 
+/// Folder in Elisa Viihde
 #[allow(dead_code)]
 pub struct Folder {
     info: FolderInfo,
@@ -97,10 +78,13 @@ pub struct Folder {
     recordings: Vec<RecordingInfo>
 }
 
+/// Iterator over folders in another folder
 pub struct FolderIter<'a> {
     index: usize,
     folder: &'a Folder
 }
+
+/// Iterator over recordings in a folder
 pub struct RecordingIter<'a> {
     index: usize,
     folder: &'a Folder
@@ -110,9 +94,11 @@ impl<'a> Folder {
     fn get_id(&self) -> i32 {
         self.info.id
     }
+    /// Returns FolderIter over this folder
     pub fn folder_iter(&'a self) -> FolderIter<'a> {
         FolderIter { index: 0, folder: self }
     }
+    /// Returns RecordingIter over this folder
     pub fn rec_iter(&'a self) -> RecordingIter<'a> {
         RecordingIter { index: 0, folder: self }
     }
@@ -126,26 +112,27 @@ impl<'a> Folder {
     }
     #[cfg(test)]
     fn fetch_folder(&self, fi: &FolderInfo) -> Option<Folder> {
-        use std::io::{BufferedReader, File};
-        let path = &Path::new(format!("testdata/folder_{}.json", fi.id));
-        let line = BufferedReader::new(File::open(path)).read_line().unwrap();
-        let mut fldr: Folder = json::decode(line.as_ref()).unwrap();
+        use std::io::BufReader;
+        let file = File::open(format!("testdata/folder_{}.json", fi.id)).unwrap();
+        let line = BufReader::new(file).lines().next().unwrap().unwrap();
+        let mut fldr: Folder = json::decode(&line).unwrap();
         fldr.info = fi.clone();
         Some(fldr)
     }
     #[cfg(test)]
     fn fetch_recording(&self, ri: &RecordingInfo) -> Option<Recording> {
-        use std::io::{BufferedReader, File};
-        let path = &Path::new(format!("testdata/recording_{}.json", ri.program_id));
-        let line = BufferedReader::new(File::open(path)).read_line().unwrap();
-        let mut rec: Recording = json::decode(line.as_ref()).unwrap();
+        use std::io::BufReader;
+        let file = File::open(format!("testdata/recording_{}.json", ri.program_id)).unwrap();
+        let line = BufReader::new(file).lines().next().unwrap().unwrap();
+        let mut rec: Recording = json::decode(&line).unwrap();
         rec.info = ri.clone();
         Some(rec)
     }
 }
 
-impl<'a> Iterator<Folder> for FolderIter<'a> {
+impl<'a> Iterator for FolderIter<'a> {
     #![cfg(test)]
+    type Item = Folder;
     fn next(&mut self) -> Option<Folder> {
         if self.index >= self.folder.folders.len() {
             return None
@@ -154,7 +141,7 @@ impl<'a> Iterator<Folder> for FolderIter<'a> {
         self.index += 1;
         self.folder.fetch_folder(fi)
     }
-    fn size_hint(&self) -> (u32, Option<usize>) {
+    fn size_hint(&self) -> (usize, Option<usize>) {
         (0, Some(self.folder.folders.len()))
     }
 }
@@ -198,6 +185,7 @@ impl Decodable for Folder {
     }
 }
 
+/// Id of a program in Elisa Viihde
 pub enum ProgramId {
     ProgramId(i32)
 }
@@ -209,6 +197,7 @@ impl fmt::Display for ProgramId {
     }
 }
 
+/// Recording in Elisa Viihde
 #[allow(dead_code)]
 pub struct Recording {
     info: RecordingInfo,
@@ -223,6 +212,7 @@ pub struct Recording {
     recordingid : i32
 }
 
+/// Contains information of a Recording
 #[derive(Clone, RustcDecodable)]
 #[allow(dead_code)]
 pub struct RecordingInfo {
@@ -291,8 +281,35 @@ impl Recording {
 #[cfg(test)]
 mod tests {
     use rustc_serialize::json;
-    use std::io::{BufferedReader, File};
+    use std::io::BufReader;
     use super::{Recording, Folder};
+    use std::fs::File;
+    use std::io::Lines;
+    use std::io::BufRead;
+
+    macro_rules! setup_test(
+        ($filename:expr, $code:expr) => {
+            match BufReader::new(File::open($filename).unwrap()).lines().next().unwrap() {
+                Ok(line) => {
+                    println!("{}", line);
+                    match json::decode(&line) {
+                        Ok(res) => {
+                            $code(res)
+                        },
+                        Err(err) => {
+                            println!("{}", err);
+                            assert!(false);
+                        }
+                    };
+                },
+                Err(err) => {
+                    println!("{}", err);
+                    assert!(false);
+                }
+            }
+        }
+);
+
 
     #[test]
     fn able_to_parse_folder() {
