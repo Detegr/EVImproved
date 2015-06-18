@@ -1,12 +1,19 @@
 /* vim: set et: */
 
+use cookie::CookieJar;
+use headers;
+use hyper::client::Client;
+use hyper::header::{Cookie,Headers};
+use hyper;
 use std::default::Default;
 use std::fmt;
+use std::fs::File;
+use std::io::{BufRead, Read};
+use std::ops::Deref;
+use std::path::PathBuf;
 use url::Url;
 use url::percent_encoding::percent_decode;
-use std::fs::File;
-use std::path::PathBuf;
-use std::io::BufRead;
+use urls::EVUrl;
 
 #[allow(unused_imports)]
 use rustc_serialize::{json,Decodable,Decoder};
@@ -33,15 +40,15 @@ impl fmt::Display for FolderId {
 
 /// Contains information of a folder
 #[allow(dead_code)]
-#[derive(Clone, RustcDecodable)]
+#[derive(Clone, Debug, RustcDecodable)]
 pub struct FolderInfo {
-    id: i32,
-    name: String,
-    size: String, // TODO: Floating point
-    has_unwatched: String, // TODO: Boolean
-    has_wildcards: String, // TODO: Boolean
-    has_pin: String, // TODO: option<int>
-    recordings_count: usize
+    id: i32, // TODO: Use FolderId and manually implement Decodable
+    pub name: String,
+    pub size: String, // TODO: Floating point
+    pub has_unwatched: String, // TODO: Boolean
+    pub has_wildcards: String, // TODO: Boolean
+    pub has_pin: String, // TODO: option<int>
+    pub recordings_count: usize
 }
 /*
 impl<E, D : Decoder<E>> Decodable<D, E> for FolderInfo {
@@ -60,26 +67,78 @@ impl FolderInfo {
     fn root(rec_count: usize) -> FolderInfo {
         FolderInfo {
             id: 0,
-            name: "Root".to_string(),
-            size: "0".to_string(),
-            has_unwatched: "false".to_string(),
-            has_wildcards: "false".to_string(),
-            has_pin: "false".to_string(),
+            name: "Root".into(),
+            size: "0".into(),
+            has_unwatched: "false".into(),
+            has_wildcards: "false".into(),
+            has_pin: "false".into(),
             recordings_count: rec_count
         }
     }
 }
+/// Represents an item returned by Folders iterator
+pub struct FolderItem<'a> {
+    session_headers: &'a Headers,
+    folder_info: &'a FolderInfo,
+}
+impl<'a> FolderItem<'a> {
+    #[cfg(not(test))]
+    pub fn fetch(&self) -> Option<Folder> {
+        // TODO: Use FolderId enum
+        let url = match self.folder_info.id {
+            0 => EVUrl::Folder(FolderId::Root),
+            id => EVUrl::Folder(FolderId::FolderId(id))
+        };
+        let mut client = Client::new();
+        let res = client.get(url).headers(self.session_headers.clone()).send();
+        res.ok().and_then(|mut res| {
+            let mut ok = String::new();
+            res.read_to_string(&mut ok);
+            json::decode(&ok).and_then(|mut f: Folder| {
+                f.info = self.folder_info.clone();
+                f.set_headers(self.session_headers);
+                Ok(f)
+            }).ok()
+        })
+    }
+}
+impl<'a> Deref for FolderItem<'a> {
+    type Target = FolderInfo;
+    fn deref<'b>(&'b self) -> &'b Self::Target {
+        self.folder_info
+    }
+}
+
+pub struct RecordingItem<'a> {
+    session_headers: &'a Headers,
+    recording_info: &'a RecordingInfo,
+}
+impl<'a> RecordingItem<'a> {
+    #[cfg(not(test))]
+    fn fetch(&self) -> Option<Recording> {
+        None // NYI
+    }
+}
+impl<'a> Deref for RecordingItem<'a> {
+    type Target = RecordingInfo;
+    fn deref<'b>(&'b self) -> &'b Self::Target {
+        self.recording_info
+    }
+}
+
 
 /// Folder in Elisa Viihde
 #[allow(dead_code)]
+#[derive(Debug)]
 pub struct Folder {
     info: FolderInfo,
     folders: Vec<FolderInfo>,
-    recordings: Vec<RecordingInfo>
+    recordings: Vec<RecordingInfo>,
+    session_headers: Headers
 }
 
 /// Iterator over folders in another folder
-pub struct FolderIter<'a> {
+pub struct Folders<'a> {
     index: usize,
     folder: &'a Folder
 }
@@ -94,52 +153,40 @@ impl<'a> Folder {
     fn get_id(&self) -> i32 {
         self.info.id
     }
-    /// Returns FolderIter over this folder
-    pub fn folder_iter(&'a self) -> FolderIter<'a> {
-        FolderIter { index: 0, folder: self }
+    /// Returns Folders over this folder
+    pub fn folders(&'a self) -> Folders<'a> {
+        Folders { index: 0, folder: &self }
     }
     /// Returns RecordingIter over this folder
-    pub fn rec_iter(&'a self) -> RecordingIter<'a> {
+    pub fn recordings(&'a self) -> RecordingIter<'a> {
         RecordingIter { index: 0, folder: self }
     }
-    #[cfg(not(test))]
-    fn fetch_folder(&self, fi: &FolderInfo) -> Option<Folder> {
-        None // NYI
-    }
-    #[cfg(not(test))]
-    fn fetch_recording(&self, ri: &RecordingInfo) -> Option<Recording> {
-        None // NYI
-    }
-    #[cfg(test)]
-    fn fetch_folder(&self, fi: &FolderInfo) -> Option<Folder> {
-        use std::io::BufReader;
-        let file = File::open(format!("testdata/folder_{}.json", fi.id)).unwrap();
-        let line = BufReader::new(file).lines().next().unwrap().unwrap();
-        let mut fldr: Folder = json::decode(&line).unwrap();
-        fldr.info = fi.clone();
-        Some(fldr)
-    }
-    #[cfg(test)]
-    fn fetch_recording(&self, ri: &RecordingInfo) -> Option<Recording> {
-        use std::io::BufReader;
-        let file = File::open(format!("testdata/recording_{}.json", ri.program_id)).unwrap();
-        let line = BufReader::new(file).lines().next().unwrap().unwrap();
-        let mut rec: Recording = json::decode(&line).unwrap();
-        rec.info = ri.clone();
-        Some(rec)
+    /// TODO: Is this necessary to be public? (Sets http headers for subsequent calls using this folder)
+    pub fn set_headers(&mut self, headers: &Headers) {
+        self.session_headers = headers.clone();
     }
 }
 
-impl<'a> Iterator for FolderIter<'a> {
-    #![cfg(test)]
-    type Item = Folder;
-    fn next(&mut self) -> Option<Folder> {
-        if self.index >= self.folder.folders.len() {
-            return None
+impl fmt::Display for Folder {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        write!(fmt, "{}", self.info.name)
+    }
+}
+
+impl<'a> Iterator for Folders<'a> {
+    type Item = FolderItem<'a>;
+    fn next(&mut self) -> Option<Self::Item> {
+        let items = self.folder.folders.len();
+        if items!=0 && self.index < items-1 {
+            self.index += 1;
+            Some(FolderItem {
+                session_headers: &self.folder.session_headers,
+                folder_info: &self.folder.folders[self.index]
+            })
         }
-        let fi = &self.folder.folders[self.index];
-        self.index += 1;
-        self.folder.fetch_folder(fi)
+        else {
+            None
+        }
     }
     fn size_hint(&self) -> (usize, Option<usize>) {
         (0, Some(self.folder.folders.len()))
@@ -147,14 +194,19 @@ impl<'a> Iterator for FolderIter<'a> {
 }
 
 impl<'a> Iterator for RecordingIter<'a> {
-    type Item = Recording;
-    fn next(&mut self) -> Option<Recording> {
-        if self.index >= self.folder.recordings.len() {
+    type Item = RecordingItem<'a>;
+    fn next(&mut self) -> Option<Self::Item> {
+        let items = self.folder.recordings.len();
+        if items!=0 && self.index < items-1 {
+            self.index += 1;
+            Some(RecordingItem {
+                session_headers: &self.folder.session_headers,
+                recording_info: &self.folder.recordings[self.index]
+            })
+        }
+        else {
             return None
         }
-        let ri = &self.folder.recordings[self.index];
-        self.index += 1;
-        self.folder.fetch_recording(ri)
     }
     fn size_hint(&self) -> (usize, Option<usize>) {
         (0, Some(self.folder.recordings.len()))
@@ -167,7 +219,8 @@ impl Folder {
         Ok(Folder {
             info: FolderInfo::root(recordings.len()),
             folders: json_field!("folders", d),
-            recordings: recordings
+            recordings: recordings,
+            session_headers: Headers::new(),
         })
     }
 }
@@ -199,21 +252,22 @@ impl fmt::Display for ProgramId {
 
 /// Recording in Elisa Viihde
 #[allow(dead_code)]
+#[derive(Debug)]
 pub struct Recording {
     info: RecordingInfo,
-    id : i32,
-    name : String,
-    channel : String,
-    length : i32,
-    start_time : String,
-    end_time : String,
-    url : Url,
-    programviewid : i32,
-    recordingid : i32
+    id: i32,
+    name: String,
+    channel: String,
+    length: i32,
+    start_time: String,
+    end_time: String,
+    url: Url,
+    programviewid: i32,
+    recordingid: i32
 }
 
 /// Contains information of a Recording
-#[derive(Clone, RustcDecodable)]
+#[derive(Clone, Debug, RustcDecodable)]
 #[allow(dead_code)]
 pub struct RecordingInfo {
     id : i32,
@@ -265,17 +319,7 @@ impl Decodable for Recording {
     }
 }
 
-#[allow(dead_code)]
 impl Recording {
-    pub fn get_id(&self) -> i32 { self.id }
-    pub fn get_name(&self) -> &str { self.name.as_ref() }
-    pub fn get_channel(&self) -> &str { self.channel.as_ref() }
-    pub fn get_length(&self) -> i32 { self.length }
-    pub fn get_start_time(&self) -> &str { self.start_time.as_ref() } // TODO
-    pub fn get_end_time(&self) -> &str { self.end_time.as_ref() } // TODO
-    pub fn get_url(&self) -> &Url { &self.url }
-    pub fn get_program_view_id(&self) -> i32 { self.programviewid }
-    pub fn get_recording_id(&self) -> i32 { self.recordingid }
 }
 
 #[cfg(test)]
@@ -308,7 +352,30 @@ mod tests {
                 }
             }
         }
-);
+    );
+
+    impl<'a> super::FolderItem<'a> {
+        #[cfg(test)]
+        fn fetch(&self) -> Option<Folder> {
+            use std::io::BufReader;
+            let file = File::open(format!("testdata/folder_{}.json", self.folder_info.id)).unwrap();
+            let line = BufReader::new(file).lines().next().unwrap().unwrap();
+            let mut fldr: Folder = json::decode(&line).unwrap();
+            fldr.info = self.folder_info.clone();
+            Some(fldr)
+        }
+    }
+    impl<'a> super::RecordingItem<'a> {
+        #[cfg(test)]
+        fn fetch(&self) -> Option<Recording> {
+            use std::io::BufReader;
+            let file = File::open(format!("testdata/recording_{}.json", self.recording_info.program_id)).unwrap();
+            let line = BufReader::new(file).lines().next().unwrap().unwrap();
+            let mut rec: Recording = json::decode(&line).unwrap();
+            rec.info = self.recording_info.clone();
+            Some(rec)
+        }
+    }
 
 
     #[test]
@@ -319,11 +386,11 @@ mod tests {
     #[test]
     fn able_to_iterate_folders() {
         setup_test!("testdata/root_folder.json", |f : Folder| {
-            assert!(f.folder_iter().size_hint() == (0, Some(2)), "Folder iterator had invalid bounds");
+            assert!(f.folders().size_hint() == (0, Some(2)), "Folder iterator had invalid bounds");
             let mut has_items: bool = false;
-            for fldr in f.folder_iter() {
+            for fldr in f.folders() {
                 has_items = true;
-                match fldr.get_id() {
+                match fldr.id {
                     1000001 | 1000002 => {},
                     _ => assert!(false, "Folder id was invalid")
                 }
@@ -335,11 +402,11 @@ mod tests {
     #[test]
     fn able_to_iterate_recordings() {
         setup_test!("testdata/root_folder.json", |f : Folder| {
-            //assert!(f.rec_iter().size_hint() == (0, Some(2)));
+            //assert!(f.recordings().size_hint() == (0, Some(2)));
             let mut has_items = false;
-            for rec in f.rec_iter() {
+            for rec in f.recordings() {
                 has_items = true;
-                match rec.info.program_id {
+                match rec.program_id {
                     1000001 | 1000002 => {},
                     _ => assert!(false, "Program id was invalid")
                 }
@@ -351,15 +418,15 @@ mod tests {
     #[test]
     fn able_to_parse_recording() -> () {
         setup_test!("testdata/recording_1000001.json", |r : Recording| {
-            assert!(r.get_id() == 1000001);
-            assert!(r.get_name() == "Tämä on testi"); // Finnish characters used on purpose
-            assert!(r.get_channel() == "MTV3");
-            assert!(r.get_length() == 5);
+            assert!(r.id == 1000001);
+            assert!(r.name == "Tämä on testi"); // Finnish characters used on purpose
+            assert!(r.channel == "MTV3");
+            assert!(r.length == 5);
             // start_time
             // end_time
-            assert!(r.get_url().to_string() == "http://google.fi/");
-            assert!(r.get_program_view_id() == 123456789);
-            assert!(r.get_recording_id() == 987654321);
+            assert!(r.url.to_string() == "http://google.fi/");
+            assert!(r.programviewid == 123456789);
+            assert!(r.recordingid == 987654321);
         });
     }
 }
