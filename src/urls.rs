@@ -35,6 +35,7 @@ impl fmt::Display for EVUrl {
     }
 }
 
+#[cfg(test)]
 mod tests {
     use super::EVUrl;
     use types::FolderId;

@@ -1,16 +1,11 @@
 /* vim: set et: */
 
-use cookie::CookieJar;
-use headers;
 use hyper::client::Client;
-use hyper::header::{Cookie,Headers};
-use hyper;
+use hyper::header::Headers;
 use std::default::Default;
 use std::fmt;
-use std::fs::File;
-use std::io::{BufRead, Read};
+use std::io::Read;
 use std::ops::Deref;
-use std::path::PathBuf;
 use url::Url;
 use url::percent_encoding::percent_decode;
 use urls::EVUrl;
@@ -93,7 +88,9 @@ impl<'a> FolderItem<'a> {
         let res = client.get(url).headers(self.session_headers.clone()).send();
         res.ok().and_then(|mut res| {
             let mut ok = String::new();
-            res.read_to_string(&mut ok);
+            if let Err(_) = res.read_to_string(&mut ok) {
+                return None
+            }
             json::decode(&ok).and_then(|mut f: Folder| {
                 f.info = self.folder_info.clone();
                 f.set_headers(self.session_headers);
@@ -150,9 +147,6 @@ pub struct RecordingIter<'a> {
 }
 
 impl<'a> Folder {
-    fn get_id(&self) -> i32 {
-        self.info.id
-    }
     /// Returns Folders over this folder
     pub fn folders(&'a self) -> Folders<'a> {
         Folders { index: 0, folder: &self }

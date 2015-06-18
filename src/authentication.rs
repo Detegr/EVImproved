@@ -1,8 +1,7 @@
-use hyper;
 use hyper::client::Client;
-use hyper::header::{Cookie, SetCookie, Headers};
+use hyper::header::SetCookie;
 use urls::EVUrl;
-use types::{Folder, FolderId, FolderInfo};
+use types::{Folder, FolderId};
 use std::io::Read;
 use url::form_urlencoded::serialize;
 use cookie::CookieJar;
@@ -24,7 +23,7 @@ pub fn login(username: &str, password: &str) -> Result<Folder, String> {
                 .send() {
         Ok(mut res) => {
             let mut ok = String::new();
-            res.read_to_string(&mut ok);
+            try!(res.read_to_string(&mut ok).map_err(|e| String::from(e.description())));
             match &*ok {
                 "TRUE" => {
                     let mut jar = CookieJar::new(b"cookiejar");
@@ -48,7 +47,7 @@ fn fetch_root_folder(jar: CookieJar) -> Result<Folder, String> {
     let ret = match client.get(EVUrl::Folder(FolderId::Root)).headers(headers.clone()).send() {
         Ok(mut res) => {
             let mut ok = String::new();
-            res.read_to_string(&mut ok);
+            try!(res.read_to_string(&mut ok).map_err(|e| String::from(e.description())));
             let mut folder: Folder = try!(json::decode(&ok).map_err(|e| String::from(e.description())));
             folder.set_headers(&headers);
             Ok(folder)
