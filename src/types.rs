@@ -141,7 +141,7 @@ pub struct Folders<'a> {
 }
 
 /// Iterator over recordings in a folder
-pub struct RecordingIter<'a> {
+pub struct Recordings<'a> {
     index: usize,
     folder: &'a Folder
 }
@@ -151,9 +151,9 @@ impl<'a> Folder {
     pub fn folders(&'a self) -> Folders<'a> {
         Folders { index: 0, folder: &self }
     }
-    /// Returns RecordingIter over this folder
-    pub fn recordings(&'a self) -> RecordingIter<'a> {
-        RecordingIter { index: 0, folder: self }
+    /// Returns Recordings over this folder
+    pub fn recordings(&'a self) -> Recordings<'a> {
+        Recordings { index: 0, folder: self }
     }
     /// TODO: Is this necessary to be public? (Sets http headers for subsequent calls using this folder)
     pub fn set_headers(&mut self, headers: &Headers) {
@@ -187,7 +187,7 @@ impl<'a> Iterator for Folders<'a> {
     }
 }
 
-impl<'a> Iterator for RecordingIter<'a> {
+impl<'a> Iterator for Recordings<'a> {
     type Item = RecordingItem<'a>;
     fn next(&mut self) -> Option<Self::Item> {
         let items = self.folder.recordings.len();
