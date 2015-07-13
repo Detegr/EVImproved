@@ -299,31 +299,31 @@ impl fmt::Display for ProgramId {
 #[allow(dead_code)]
 #[derive(Debug)]
 pub struct Recording {
-    info: RecordingInfo,
-    id: i32,
-    name: String,
-    channel: String,
-    length: i32,
-    start_time: String,
-    end_time: String,
-    url: Url,
-    programviewid: i32,
-    recordingid: i32
+    pub info: RecordingInfo,
+    pub id: i32,
+    pub name: String,
+    pub channel: String,
+    pub length: i32,
+    pub start_time: String,
+    pub end_time: String,
+    pub url: Url,
+    pub programviewid: i32,
+    pub recordingid: i32
 }
 
 /// Contains information of a Recording
 #[derive(Clone, Debug, RustcDecodable)]
 #[allow(dead_code)]
 pub struct RecordingInfo {
-    id : i32,
-    program_id : i32,
-    folder_id : String, // TODO: Option<int>
-    name: String,
-    channel: String,
-    start_time: String, // TODO
-    timestamp: String, // TODO
-    viewcount: i32,
-    length: i32
+    pub id : i32,
+    pub program_id : i32,
+    pub folder_id : String, // TODO: Option<int>
+    pub name: String,
+    pub channel: String,
+    pub start_time: String, // TODO
+    pub timestamp: String, // TODO
+    pub viewcount: i32,
+    pub length: i32
 }
 
 impl Default for RecordingInfo {
