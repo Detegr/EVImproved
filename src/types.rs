@@ -9,6 +9,9 @@ use std::ops::Deref;
 use url::Url;
 use url::percent_encoding::percent_decode;
 use urls::EVUrl;
+use std::vec;
+
+use std::iter::{repeat,Chain,Filter,FlatMap,Repeat,Map,Zip};
 
 #[allow(unused_imports)]
 use rustc_serialize::{json,Decodable,Decoder};
@@ -72,11 +75,21 @@ impl FolderInfo {
     }
 }
 /// Represents an item returned by Folders iterator
-pub struct FolderItem<'a> {
+pub struct FolderRef<'a> {
     session_headers: &'a Headers,
     folder_info: &'a FolderInfo,
 }
-impl<'a> FolderItem<'a> {
+impl<'a> FolderRef<'a> {
+    pub fn from_folder(folder: &Folder) -> FolderRef {
+        FolderRef {
+            session_headers: &folder.session_headers,
+            folder_info: &folder.info
+        }
+    }
+    #[cfg(not(test))]
+    pub fn fetch_into(self) -> Option<Folder> {
+        self.fetch()
+    }
     #[cfg(not(test))]
     pub fn fetch(&self) -> Option<Folder> {
         // TODO: Use FolderId enum
@@ -99,24 +112,24 @@ impl<'a> FolderItem<'a> {
         })
     }
 }
-impl<'a> Deref for FolderItem<'a> {
+impl<'a> Deref for FolderRef<'a> {
     type Target = FolderInfo;
     fn deref<'b>(&'b self) -> &'b Self::Target {
         self.folder_info
     }
 }
 
-pub struct RecordingItem<'a> {
+pub struct RecordingRef<'a> {
     session_headers: &'a Headers,
     recording_info: &'a RecordingInfo,
 }
-impl<'a> RecordingItem<'a> {
+impl<'a> RecordingRef<'a> {
     #[cfg(not(test))]
     fn fetch(&self) -> Option<Recording> {
         None // NYI
     }
 }
-impl<'a> Deref for RecordingItem<'a> {
+impl<'a> Deref for RecordingRef<'a> {
     type Target = RecordingInfo;
     fn deref<'b>(&'b self) -> &'b Self::Target {
         self.recording_info
@@ -132,6 +145,44 @@ pub struct Folder {
     folders: Vec<FolderInfo>,
     recordings: Vec<RecordingInfo>,
     session_headers: Headers
+}
+
+/// Folder's IntoIterator implementation iterates over all recordings
+/// of all folders starting from and including the folder into_iter() is called to
+impl IntoIterator for Folder {
+    type Item = RecordingInfo;
+    type IntoIter =
+        Chain<
+            FlatMap<
+                Filter<
+                    Map<
+                        Zip<vec::IntoIter<FolderInfo>, Repeat<Headers>>,
+                        fn((FolderInfo, Headers)) -> Option<Folder>
+                    >,
+                    fn(&Option<Folder>) -> bool
+                >,
+                vec::IntoIter<RecordingInfo>,
+                fn(Option<Folder>) -> vec::IntoIter<RecordingInfo>
+            >,
+            vec::IntoIter<RecordingInfo>
+        >;
+    fn into_iter(self) -> Self::IntoIter {
+        self.folders.into_iter()
+            .zip(repeat(self.session_headers.clone()))
+            .map(into_iter_folderref as fn((FolderInfo, Headers)) -> Option<Folder>)
+            .filter(Option::<Folder>::is_some as fn(&Option<Folder>) -> bool)
+            .flat_map(into_iter_unwrapper as fn(Option<Folder>) -> vec::IntoIter<RecordingInfo>)
+            .chain(self.recordings.into_iter())
+    }
+}
+fn into_iter_folderref(data: (FolderInfo, Headers)) -> Option<Folder> {
+    FolderRef {
+        folder_info: &data.0,
+        session_headers: &data.1,
+    }.fetch_into()
+}
+fn into_iter_unwrapper(f: Option<Folder>) -> vec::IntoIter<RecordingInfo> {
+    f.unwrap().recordings.into_iter()
 }
 
 /// Iterator over folders in another folder
@@ -168,12 +219,12 @@ impl fmt::Display for Folder {
 }
 
 impl<'a> Iterator for Folders<'a> {
-    type Item = FolderItem<'a>;
+    type Item = FolderRef<'a>;
     fn next(&mut self) -> Option<Self::Item> {
         let items = self.folder.folders.len();
         if items!=0 && self.index < items-1 {
             self.index += 1;
-            Some(FolderItem {
+            Some(FolderRef {
                 session_headers: &self.folder.session_headers,
                 folder_info: &self.folder.folders[self.index]
             })
@@ -188,12 +239,12 @@ impl<'a> Iterator for Folders<'a> {
 }
 
 impl<'a> Iterator for Recordings<'a> {
-    type Item = RecordingItem<'a>;
+    type Item = RecordingRef<'a>;
     fn next(&mut self) -> Option<Self::Item> {
         let items = self.folder.recordings.len();
         if items!=0 && self.index < items-1 {
             self.index += 1;
-            Some(RecordingItem {
+            Some(RecordingRef {
                 session_headers: &self.folder.session_headers,
                 recording_info: &self.folder.recordings[self.index]
             })
@@ -348,7 +399,7 @@ mod tests {
         }
     );
 
-    impl<'a> super::FolderItem<'a> {
+    impl<'a> super::FolderRef<'a> {
         #[cfg(test)]
         fn fetch(&self) -> Option<Folder> {
             use std::io::BufReader;
@@ -359,7 +410,7 @@ mod tests {
             Some(fldr)
         }
     }
-    impl<'a> super::RecordingItem<'a> {
+    impl<'a> super::RecordingRef<'a> {
         #[cfg(test)]
         fn fetch(&self) -> Option<Recording> {
             use std::io::BufReader;
