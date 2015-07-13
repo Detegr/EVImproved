@@ -86,7 +86,6 @@ impl<'a> FolderRef<'a> {
             folder_info: &folder.info
         }
     }
-    #[cfg(not(test))]
     pub fn fetch_into(self) -> Option<Folder> {
         self.fetch()
     }

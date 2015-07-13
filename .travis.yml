@@ -3,3 +3,4 @@ rust:
     - nightly
 notifications:
     email: false
+sudo: false
