@@ -400,7 +400,7 @@ mod tests {
 
     impl<'a> super::FolderRef<'a> {
         #[cfg(test)]
-        fn fetch(&self) -> Option<Folder> {
+        pub fn fetch(&self) -> Option<Folder> {
             use std::io::BufReader;
             let file = File::open(format!("testdata/folder_{}.json", self.folder_info.id)).unwrap();
             let line = BufReader::new(file).lines().next().unwrap().unwrap();
@@ -411,7 +411,7 @@ mod tests {
     }
     impl<'a> super::RecordingRef<'a> {
         #[cfg(test)]
-        fn fetch(&self) -> Option<Recording> {
+        pub fn fetch(&self) -> Option<Recording> {
             use std::io::BufReader;
             let file = File::open(format!("testdata/recording_{}.json", self.recording_info.program_id)).unwrap();
             let line = BufReader::new(file).lines().next().unwrap().unwrap();
