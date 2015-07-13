@@ -11,7 +11,7 @@ use evimproved::authentication;
 fn main() {
     let root = authentication::login("username", "password").unwrap();
 
-    // Iteration over all folders
+    // Iteration over folders in a certain folder
     for folder in root.folders() {
         println!("{}", folder.name);
     }
