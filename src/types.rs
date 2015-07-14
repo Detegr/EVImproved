@@ -311,7 +311,7 @@ pub struct Recording {
 }
 
 /// Contains information of a Recording
-#[derive(Clone, Debug, RustcDecodable)]
+#[derive(Clone, Debug)]
 #[allow(dead_code)]
 pub struct RecordingInfo {
     pub id : i32,
@@ -338,6 +338,27 @@ impl Default for RecordingInfo {
             viewcount: 0,
             length: 0
         }
+    }
+}
+
+impl Decodable for RecordingInfo {
+    fn decode<D : Decoder>(d: &mut D) -> Result<RecordingInfo, D::Error> {
+        d.read_struct("", 0, |d| {
+            Ok(RecordingInfo {
+                id: json_field!("id", d),
+                program_id: json_field!("program_id", d),
+                folder_id: json_field!("folder_id", d),
+                name: {
+                    let percent_encoded_str : String = json_field!("name", d);
+                    String::from_utf8(percent_decode(percent_encoded_str.as_bytes())).unwrap()
+                },
+                channel: json_field!("channel", d),
+                start_time: json_field!("start_time", d),
+                timestamp: json_field!("timestamp", d),
+                viewcount: json_field!("viewcount", d),
+                length: json_field!("length", d)
+            })
+        })
     }
 }
 
