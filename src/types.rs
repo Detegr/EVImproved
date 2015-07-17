@@ -45,7 +45,7 @@ pub struct FolderInfo {
     pub size: String, // TODO: Floating point
     pub has_unwatched: String, // TODO: Boolean
     pub has_wildcards: String, // TODO: Boolean
-    pub has_pin: String, // TODO: option<int>
+    pub has_pin: String, // TODO: Boolean
     pub recordings_count: usize
 }
 /*
@@ -316,7 +316,7 @@ pub struct Recording {
 pub struct RecordingInfo {
     pub id : i32,
     pub program_id : i32,
-    pub folder_id : String, // TODO: Option<int>
+    pub folder_id : Option<i32>,
     pub name: String,
     pub channel: String,
     pub start_time: String, // TODO
@@ -330,7 +330,7 @@ impl Default for RecordingInfo {
         RecordingInfo {
             id: 0,
             program_id: 0,
-            folder_id: "".to_string(),
+            folder_id: None,
             name: "".to_string(),
             channel: "".to_string(),
             start_time: "".to_string(),
@@ -347,7 +347,10 @@ impl Decodable for RecordingInfo {
             Ok(RecordingInfo {
                 id: json_field!("id", d),
                 program_id: json_field!("program_id", d),
-                folder_id: json_field!("folder_id", d),
+                folder_id: {
+                    let idstr: String = json_field!("folder_id", d);
+                    str::parse::<i32>(&idstr).ok()
+                },
                 name: {
                     let percent_encoded_str : String = json_field!("name", d);
                     String::from_utf8(percent_decode(percent_encoded_str.as_bytes())).unwrap()
