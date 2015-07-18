@@ -222,11 +222,12 @@ impl<'a> Iterator for Folders<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         let items = self.folder.folders.len();
         if items!=0 && self.index < items-1 {
-            self.index += 1;
-            Some(FolderRef {
+            let ret = Some(FolderRef {
                 session_headers: &self.folder.session_headers,
                 folder_info: &self.folder.folders[self.index]
-            })
+            });
+            self.index += 1;
+            ret
         }
         else {
             None
@@ -242,11 +243,12 @@ impl<'a> Iterator for Recordings<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         let items = self.folder.recordings.len();
         if items!=0 && self.index < items-1 {
-            self.index += 1;
-            Some(RecordingRef {
+            let ret = Some(RecordingRef {
                 session_headers: &self.folder.session_headers,
                 recording_info: &self.folder.recordings[self.index]
-            })
+            });
+            self.index += 1;
+            ret
         }
         else {
             return None
