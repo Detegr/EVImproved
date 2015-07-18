@@ -10,6 +10,8 @@ use url::Url;
 use url::percent_encoding::percent_decode;
 use urls::EVUrl;
 use std::vec;
+use std::str::FromStr;
+use std::error::Error;
 
 use std::iter::{repeat,Chain,Filter,FlatMap,Repeat,Map,Zip};
 
@@ -36,40 +38,85 @@ impl fmt::Display for FolderId {
     }
 }
 
+#[derive(Clone, Debug)]
+pub enum FolderSize {
+    Bytes(f32),
+    Kilobytes(f32),
+    Megabytes(f32),
+    Gigabytes(f32),
+}
+impl FromStr for FolderSize {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut words = s.split_whitespace();
+        words.next()
+            .and_then(|val_str| str::parse::<f32>(val_str).map(|v| (v * 100.0).round() / 100.0).ok())
+            .and_then(|val| {
+                match words.next() {
+                    Some("GB") => Some(FolderSize::Gigabytes(val)),
+                    Some("MB") => Some(FolderSize::Megabytes(val)),
+                    Some("KB") | Some("kB") => Some(FolderSize::Kilobytes(val)),
+                    _ => None
+                }
+            })
+            .ok_or("Not a valid size".into())
+    }
+}
+
 /// Contains information of a folder
 #[allow(dead_code)]
-#[derive(Clone, Debug, RustcDecodable)]
+#[derive(Clone, Debug)]
 pub struct FolderInfo {
     id: i32, // TODO: Use FolderId and manually implement Decodable
     pub name: String,
-    pub size: String, // TODO: Floating point
-    pub has_unwatched: String, // TODO: Boolean
-    pub has_wildcards: String, // TODO: Boolean
-    pub has_pin: String, // TODO: Boolean
+    pub size: FolderSize,
+    pub has_unwatched: bool,
+    pub has_wildcards: bool,
+    pub has_pin: Option<i32>, // TODO: Is this correct? I have no idea.
     pub recordings_count: usize
 }
-/*
-impl<E, D : Decoder<E>> Decodable<D, E> for FolderInfo {
-    fn decode(d: &mut D) -> Result<Folder, E> {
-        let size_str = json_value!("size", d).words().next();
-        let size = Float::parse(size_str.as_ref());
-        Ok(FolderInfo {
-            id: json_value!("id", d),
-            name: json_value!("name", d),
-            size: size
+impl Decodable for FolderInfo {
+    fn decode<D : Decoder>(d: &mut D) -> Result<FolderInfo, D::Error> {
+        d.read_struct("", 0, |d| {
+            Ok(FolderInfo {
+                id: json_field!("id", d),
+                name: json_field!("name", d),
+                size: {
+                    let size_string: String = json_field!("size", d);
+                    try!(FolderSize::from_str(&size_string[..]).map_err(|e| d.error(&e[..])))
+                },
+                has_unwatched: {
+                    let b: String = json_field!("has_unwatched", d);
+                    try!(str::parse::<bool>(&b[..]).map_err(|e| d.error(e.description())))
+                },
+                has_wildcards: {
+                    let b: String = json_field!("has_wildcards", d);
+                    try!(str::parse::<bool>(&b[..]).map_err(|e| d.error(e.description())))
+                },
+                has_pin: {
+                    let b: String = json_field!("has_pin", d);
+                    match b.len() {
+                        0 => None,
+                        _ => {
+                            Some(try!(str::parse::<i32>(&b[..]).map_err(|e| d.error(e.description()))))
+                        }
+                    }
+                },
+                recordings_count: json_field!("recordings_count", d),
+            })
         })
     }
-}*/
+}
 
 impl FolderInfo {
     fn root(rec_count: usize) -> FolderInfo {
         FolderInfo {
             id: 0,
             name: "Root".into(),
-            size: "0".into(),
-            has_unwatched: "false".into(),
-            has_wildcards: "false".into(),
-            has_pin: "false".into(),
+            size: FolderSize::Bytes(0.0),
+            has_unwatched: false,
+            has_wildcards: false,
+            has_pin: None,
             recordings_count: rec_count
         }
     }
@@ -396,7 +443,7 @@ impl Recording {
 mod tests {
     use rustc_serialize::json;
     use std::io::BufReader;
-    use super::{Recording, Folder};
+    use super::{Recording, Folder, FolderSize};
     use std::fs::File;
     use std::io::Lines;
     use std::io::BufRead;
@@ -463,6 +510,15 @@ mod tests {
                 match fldr.id {
                     1000001 | 1000002 => {},
                     _ => assert!(false, "Folder id was invalid")
+                }
+                match &fldr.name[..] {
+                    "Foldername" | "Test folder" => {},
+                    _ => assert!(false, "Folder name was invalid")
+                }
+                println!("{:?}", fldr.size);
+                match fldr.size {
+                    FolderSize::Gigabytes(57.31) | FolderSize::Gigabytes(865.87) => {},
+                    _ => assert!(false, "Invalid size")
                 }
             }
             assert!(has_items, "Folder iterator should return some items but it returned none");
