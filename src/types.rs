@@ -25,6 +25,7 @@ macro_rules! json_field {
 }
 
 /// Describes an id of an folder
+#[derive(Copy, Clone, Debug)]
 pub enum FolderId {
     Root,
     FolderId(i32)
@@ -38,6 +39,7 @@ impl fmt::Display for FolderId {
     }
 }
 
+/// Describes a size of a folder
 #[derive(Clone, Debug)]
 pub enum FolderSize {
     Bytes(f32),
@@ -67,7 +69,7 @@ impl FromStr for FolderSize {
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct FolderInfo {
-    id: i32, // TODO: Use FolderId and manually implement Decodable
+    id: FolderId,
     pub name: String,
     pub size: FolderSize,
     pub has_unwatched: bool,
@@ -79,7 +81,12 @@ impl Decodable for FolderInfo {
     fn decode<D : Decoder>(d: &mut D) -> Result<FolderInfo, D::Error> {
         d.read_struct("", 0, |d| {
             Ok(FolderInfo {
-                id: json_field!("id", d),
+                id: {
+                    match json_field!("id", d) {
+                        0 => FolderId::Root,
+                        n => FolderId::FolderId(n)
+                    }
+                },
                 name: json_field!("name", d),
                 size: {
                     let size_string: String = json_field!("size", d);
@@ -111,7 +118,7 @@ impl Decodable for FolderInfo {
 impl FolderInfo {
     fn root(rec_count: usize) -> FolderInfo {
         FolderInfo {
-            id: 0,
+            id: FolderId::Root,
             name: "Root".into(),
             size: FolderSize::Bytes(0.0),
             has_unwatched: false,
@@ -138,11 +145,7 @@ impl<'a> FolderRef<'a> {
     }
     #[cfg(not(test))]
     pub fn fetch(&self) -> Option<Folder> {
-        // TODO: Use FolderId enum
-        let url = match self.folder_info.id {
-            0 => EVUrl::Folder(FolderId::Root),
-            id => EVUrl::Folder(FolderId::FolderId(id))
-        };
+        let url = EVUrl::Folder(self.folder_info.id);
         let mut client = Client::new();
         let res = client.get(url).headers(self.session_headers.clone()).send();
         res.ok().and_then(|mut res| {
@@ -443,7 +446,7 @@ impl Recording {
 mod tests {
     use rustc_serialize::json;
     use std::io::BufReader;
-    use super::{Recording, Folder, FolderSize};
+    use super::{Recording, Folder, FolderId, FolderSize};
     use std::fs::File;
     use std::io::Lines;
     use std::io::BufRead;
@@ -508,7 +511,7 @@ mod tests {
             for fldr in f.folders() {
                 has_items = true;
                 match fldr.id {
-                    1000001 | 1000002 => {},
+                    FolderId::FolderId(1000001) | FolderId::FolderId(1000002) => {},
                     _ => assert!(false, "Folder id was invalid")
                 }
                 match &fldr.name[..] {
