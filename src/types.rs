@@ -58,6 +58,7 @@ impl FromStr for FolderSize {
                     Some("GB") => Some(FolderSize::Gigabytes(val)),
                     Some("MB") => Some(FolderSize::Megabytes(val)),
                     Some("KB") | Some("kB") => Some(FolderSize::Kilobytes(val)),
+                    Some("B") => Some(FolderSize::Bytes(val)),
                     _ => None
                 }
             })
