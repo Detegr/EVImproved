@@ -173,9 +173,21 @@ pub struct RecordingRef<'a> {
     recording_info: &'a RecordingInfo,
 }
 impl<'a> RecordingRef<'a> {
+    pub fn fetch_into(self) -> Option<Recording> {
+        self.fetch()
+    }
     #[cfg(not(test))]
-    fn fetch(&self) -> Option<Recording> {
-        None // NYI
+    pub fn fetch(&self) -> Option<Recording> {
+        let url = EVUrl::Program(ProgramId::ProgramId(self.recording_info.program_id));
+        let client = Client::new();
+        let res = client.get(url).headers(self.session_headers.clone()).send();
+        res.ok().and_then(|mut res| {
+            let mut ok = String::new();
+            if let Err(_) = res.read_to_string(&mut ok) {
+                return None
+            }
+            json::decode(&ok).ok()
+        })
     }
 }
 impl<'a> Deref for RecordingRef<'a> {
@@ -363,8 +375,8 @@ pub struct Recording {
 }
 
 /// Contains information of a Recording
-#[derive(Clone, Debug)]
 #[allow(dead_code)]
+#[derive(Clone, Debug)]
 pub struct RecordingInfo {
     pub id : i32,
     pub program_id : i32,
@@ -437,9 +449,6 @@ impl Decodable for Recording {
             })
         })
     }
-}
-
-impl Recording {
 }
 
 #[cfg(test)]
