@@ -147,7 +147,7 @@ impl<'a> FolderRef<'a> {
     #[cfg(not(test))]
     pub fn fetch(&self) -> Option<Folder> {
         let url = EVUrl::Folder(self.folder_info.id);
-        let mut client = Client::new();
+        let client = Client::new();
         let res = client.get(url).headers(self.session_headers.clone()).send();
         res.ok().and_then(|mut res| {
             let mut ok = String::new();

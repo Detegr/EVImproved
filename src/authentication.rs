@@ -15,8 +15,8 @@ pub fn login(username: &str, password: &str) -> Result<Folder, String> {
                    ("password", password),
                    ("ajax", "true")
                ]);
-    let mut client = Client::new();
     let headers = evimproved_headers(None);
+    let client = Client::new();
     let ret = match client.post(EVUrl::Login)
                 .headers(headers)
                 .body(&data)
@@ -42,8 +42,8 @@ pub fn login(username: &str, password: &str) -> Result<Folder, String> {
 }
 
 fn fetch_root_folder(jar: CookieJar) -> Result<Folder, String> {
-    let mut client = Client::new();
     let headers = evimproved_headers(Some(jar));
+    let client = Client::new();
     let ret = match client.get(EVUrl::Folder(FolderId::Root)).headers(headers.clone()).send() {
         Ok(mut res) => {
             let mut ok = String::new();
