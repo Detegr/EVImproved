@@ -8,6 +8,7 @@ extern crate url;
 extern crate rustc_serialize;
 
 mod urls;
+mod traits;
 pub mod authentication;
 pub mod types;
 pub mod headers;

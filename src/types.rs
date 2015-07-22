@@ -1,5 +1,7 @@
 /* vim: set et: */
 
+use traits::Fetch;
+
 use hyper::client::Client;
 use hyper::header::Headers;
 use std::default::Default;
@@ -141,11 +143,14 @@ impl<'a> FolderRef<'a> {
             folder_info: &folder.info
         }
     }
-    pub fn fetch_into(self) -> Option<Folder> {
+}
+impl<'a> Fetch for FolderRef<'a> {
+    type Output = Folder;
+    fn fetch_into(self) -> Option<Folder> {
         self.fetch()
     }
     #[cfg(not(test))]
-    pub fn fetch(&self) -> Option<Folder> {
+    fn fetch(&self) -> Option<Folder> {
         let url = EVUrl::Folder(self.folder_info.id);
         let client = Client::new();
         let res = client.get(url).headers(self.session_headers.clone()).send();
@@ -173,12 +178,13 @@ pub struct RecordingRef<'a> {
     session_headers: &'a Headers,
     recording_info: &'a RecordingInfo,
 }
-impl<'a> RecordingRef<'a> {
-    pub fn fetch_into(self) -> Option<Recording> {
+impl<'a> Fetch for RecordingRef<'a> {
+    type Output = Recording;
+    fn fetch_into(self) -> Option<Recording> {
         self.fetch()
     }
     #[cfg(not(test))]
-    pub fn fetch(&self) -> Option<Recording> {
+    fn fetch(&self) -> Option<Recording> {
         let url = EVUrl::Program(ProgramId::ProgramId(self.recording_info.program_id));
         let client = Client::new();
         let res = client.get(url).headers(self.session_headers.clone()).send();
