@@ -1,21 +1,29 @@
 /* vim: set et: */
 
+use headers::evimproved_headers;
 use traits::Fetch;
 
+#[cfg(not(test))]
 use hyper::client::Client;
 use hyper::header::Headers;
 use std::default::Default;
 use std::fmt;
 use std::io::Read;
-use std::ops::Deref;
 use url::Url;
 use url::percent_encoding::percent_decode;
+#[cfg(not(test))]
 use urls::EVUrl;
 use std::vec;
 use std::str::FromStr;
 use std::error::Error;
+use cookie::CookieJar;
 
-use std::iter::{repeat,Chain,Filter,FlatMap,Repeat,Map,Zip};
+use std::iter::{Chain,Filter,FlatMap,Map};
+
+#[cfg(test)]
+use std::fs::File;
+#[cfg(test)]
+use std::io::BufRead;
 
 #[allow(unused_imports)]
 use rustc_serialize::{json,Decodable,Decoder};
@@ -78,7 +86,8 @@ pub struct FolderInfo {
     pub has_unwatched: bool,
     pub has_wildcards: bool,
     pub has_pin: Option<i32>, // TODO: Is this correct? I have no idea.
-    pub recordings_count: usize
+    pub recordings_count: usize,
+    session_headers: Option<Headers>,
 }
 impl Decodable for FolderInfo {
     fn decode<D : Decoder>(d: &mut D) -> Result<FolderInfo, D::Error> {
@@ -113,6 +122,7 @@ impl Decodable for FolderInfo {
                     }
                 },
                 recordings_count: json_field!("recordings_count", d),
+                session_headers: None,
             })
         })
     }
@@ -127,67 +137,59 @@ impl FolderInfo {
             has_unwatched: false,
             has_wildcards: false,
             has_pin: None,
-            recordings_count: rec_count
+            recordings_count: rec_count,
+            session_headers: None,
         }
     }
 }
-/// Represents an item returned by Folders iterator
-pub struct FolderRef<'a> {
-    session_headers: &'a Headers,
-    folder_info: &'a FolderInfo,
-}
-impl<'a> FolderRef<'a> {
-    pub fn from_folder(folder: &Folder) -> FolderRef {
-        FolderRef {
-            session_headers: &folder.session_headers,
-            folder_info: &folder.info
-        }
-    }
-}
-impl<'a> Fetch for FolderRef<'a> {
+impl Fetch for FolderInfo {
     type Output = Folder;
     fn fetch_into(self) -> Option<Folder> {
         self.fetch()
     }
     #[cfg(not(test))]
     fn fetch(&self) -> Option<Folder> {
-        let url = EVUrl::Folder(self.folder_info.id);
+        let url = EVUrl::Folder(self.id);
         let client = Client::new();
-        let res = client.get(url).headers(self.session_headers.clone()).send();
+        let res = client.get(url).headers(self.session_headers.clone().unwrap()).send();
         res.ok().and_then(|mut res| {
             let mut ok = String::new();
             if let Err(_) = res.read_to_string(&mut ok) {
                 return None
             }
             json::decode(&ok).and_then(|mut f: Folder| {
-                f.info = self.folder_info.clone();
-                f.set_headers(self.session_headers);
+                f.info = self.clone();
+                for finfo in f.folders.iter_mut() {
+                    finfo.session_headers = self.session_headers.clone();
+                }
+                for rinfo in f.recordings.iter_mut() {
+                    rinfo.session_headers = self.session_headers.clone();
+                }
                 Ok(f)
             }).ok()
         })
     }
-}
-impl<'a> Deref for FolderRef<'a> {
-    type Target = FolderInfo;
-    fn deref<'b>(&'b self) -> &'b Self::Target {
-        self.folder_info
+    #[cfg(test)]
+    fn fetch(&self) -> Option<Folder> {
+        use std::io::BufReader;
+        let file = File::open(format!("testdata/folder_{}.json", self.id)).unwrap();
+        let line = BufReader::new(file).lines().next().unwrap().unwrap();
+        let mut fldr: Folder = json::decode(&line).unwrap();
+        fldr.info = self.clone();
+        Some(fldr)
     }
 }
 
-pub struct RecordingRef<'a> {
-    session_headers: &'a Headers,
-    recording_info: &'a RecordingInfo,
-}
-impl<'a> Fetch for RecordingRef<'a> {
+impl Fetch for RecordingInfo {
     type Output = Recording;
     fn fetch_into(self) -> Option<Recording> {
         self.fetch()
     }
     #[cfg(not(test))]
     fn fetch(&self) -> Option<Recording> {
-        let url = EVUrl::Program(ProgramId::ProgramId(self.recording_info.program_id));
+        let url = EVUrl::Program(ProgramId::ProgramId(self.program_id));
         let client = Client::new();
-        let res = client.get(url).headers(self.session_headers.clone()).send();
+        let res = client.get(url).headers(self.session_headers.clone().unwrap()).send();
         res.ok().and_then(|mut res| {
             let mut ok = String::new();
             if let Err(_) = res.read_to_string(&mut ok) {
@@ -196,14 +198,17 @@ impl<'a> Fetch for RecordingRef<'a> {
             json::decode(&ok).ok()
         })
     }
-}
-impl<'a> Deref for RecordingRef<'a> {
-    type Target = RecordingInfo;
-    fn deref<'b>(&'b self) -> &'b Self::Target {
-        self.recording_info
+
+    #[cfg(test)]
+    fn fetch(&self) -> Option<Recording> {
+        use std::io::BufReader;
+        let file = File::open(format!("testdata/recording_{}.json", self.program_id)).unwrap();
+        let line = BufReader::new(file).lines().next().unwrap().unwrap();
+        let mut rec: Recording = json::decode(&line).unwrap();
+        rec.info = self.clone();
+        Some(rec)
     }
 }
-
 
 /// Folder in Elisa Viihde
 #[allow(dead_code)]
@@ -212,7 +217,6 @@ pub struct Folder {
     info: FolderInfo,
     folders: Vec<FolderInfo>,
     recordings: Vec<RecordingInfo>,
-    session_headers: Headers
 }
 
 /// Folder's IntoIterator implementation iterates over all recordings
@@ -224,8 +228,8 @@ impl IntoIterator for Folder {
             FlatMap<
                 Filter<
                     Map<
-                        Zip<vec::IntoIter<FolderInfo>, Repeat<Headers>>,
-                        fn((FolderInfo, Headers)) -> Option<Folder>
+                        vec::IntoIter<FolderInfo>,
+                        fn(FolderInfo) -> Option<Folder>
                     >,
                     fn(&Option<Folder>) -> bool
                 >,
@@ -236,18 +240,11 @@ impl IntoIterator for Folder {
         >;
     fn into_iter(self) -> Self::IntoIter {
         self.folders.into_iter()
-            .zip(repeat(self.session_headers.clone()))
-            .map(into_iter_folderref as fn((FolderInfo, Headers)) -> Option<Folder>)
+            .map(<FolderInfo as Fetch>::fetch_into as fn(FolderInfo) -> Option<Folder>)
             .filter(Option::<Folder>::is_some as fn(&Option<Folder>) -> bool)
             .flat_map(into_iter_unwrapper as fn(Option<Folder>) -> vec::IntoIter<RecordingInfo>)
             .chain(self.recordings.into_iter())
     }
-}
-fn into_iter_folderref(data: (FolderInfo, Headers)) -> Option<Folder> {
-    FolderRef {
-        folder_info: &data.0,
-        session_headers: &data.1,
-    }.fetch_into()
 }
 fn into_iter_unwrapper(f: Option<Folder>) -> vec::IntoIter<RecordingInfo> {
     f.unwrap().recordings.into_iter()
@@ -268,15 +265,12 @@ pub struct Recordings<'a> {
 impl<'a> Folder {
     /// Returns Folders over this folder
     pub fn folders(&'a self) -> Folders<'a> {
-        Folders { index: 0, folder: &self }
+        Folders { index: 0, folder: self }
     }
     /// Returns Recordings over this folder
     pub fn recordings(&'a self) -> Recordings<'a> {
+
         Recordings { index: 0, folder: self }
-    }
-    /// TODO: Is this necessary to be public? (Sets http headers for subsequent calls using this folder)
-    pub fn set_headers(&mut self, headers: &Headers) {
-        self.session_headers = headers.clone();
     }
 }
 
@@ -287,16 +281,13 @@ impl fmt::Display for Folder {
 }
 
 impl<'a> Iterator for Folders<'a> {
-    type Item = FolderRef<'a>;
+    type Item = &'a FolderInfo;
     fn next(&mut self) -> Option<Self::Item> {
         let items = self.folder.folders.len();
         if items!=0 && self.index < items-1 {
-            let ret = Some(FolderRef {
-                session_headers: &self.folder.session_headers,
-                folder_info: &self.folder.folders[self.index]
-            });
+            let ret = &self.folder.folders[self.index];
             self.index += 1;
-            ret
+            Some(ret)
         }
         else {
             None
@@ -308,16 +299,13 @@ impl<'a> Iterator for Folders<'a> {
 }
 
 impl<'a> Iterator for Recordings<'a> {
-    type Item = RecordingRef<'a>;
+    type Item = &'a RecordingInfo;
     fn next(&mut self) -> Option<Self::Item> {
         let items = self.folder.recordings.len();
         if items!=0 && self.index < items-1 {
-            let ret = Some(RecordingRef {
-                session_headers: &self.folder.session_headers,
-                recording_info: &self.folder.recordings[self.index]
-            });
+            let ret = &self.folder.recordings[self.index];
             self.index += 1;
-            ret
+            Some(ret)
         }
         else {
             return None
@@ -329,13 +317,36 @@ impl<'a> Iterator for Recordings<'a> {
 }
 
 impl Folder {
+    /// Fetches the root folder from Elisa Viihde
+    /// The `CookieJar` needs to have a valid `SetCookie` that has the session token.
+    /// You probably want to use `authentication::login` instead of this function.
+    #[cfg(not(test))]
+    pub fn fetch_root(jar: CookieJar) -> Result<Folder, String> {
+        let headers = evimproved_headers(Some(jar));
+        let client = Client::new();
+        let ret = match client.get(EVUrl::Folder(FolderId::Root)).headers(headers.clone()).send() {
+            Ok(mut res) => {
+                let mut ok = String::new();
+                try!(res.read_to_string(&mut ok).map_err(|e| String::from(e.description())));
+                let mut folder: Folder = try!(json::decode(&ok).map_err(|e| String::from(e.description())));
+                for finfo in folder.folders.iter_mut() {
+                    finfo.session_headers = Some(headers.clone());
+                }
+                for rinfo in folder.recordings.iter_mut() {
+                    rinfo.session_headers = Some(headers.clone());
+                }
+                Ok(folder)
+            },
+            Err(e) => Err(String::from(e.description()))
+        };
+        ret
+    }
     fn decode_folder<D : Decoder>(d: &mut D) -> Result<Folder, D::Error> {
         let recordings: Vec<RecordingInfo> = json_field!("recordings", d);
         Ok(Folder {
             info: FolderInfo::root(recordings.len()),
             folders: json_field!("folders", d),
             recordings: recordings,
-            session_headers: Headers::new(),
         })
     }
 }
@@ -393,7 +404,8 @@ pub struct RecordingInfo {
     pub start_time: String, // TODO
     pub timestamp: String, // TODO
     pub viewcount: i32,
-    pub length: i32
+    pub length: i32,
+    session_headers: Option<Headers>,
 }
 
 impl Default for RecordingInfo {
@@ -407,7 +419,8 @@ impl Default for RecordingInfo {
             start_time: "".to_string(),
             timestamp: "".to_string(),
             viewcount: 0,
-            length: 0
+            length: 0,
+            session_headers: None,
         }
     }
 }
@@ -430,7 +443,8 @@ impl Decodable for RecordingInfo {
                 start_time: json_field!("start_time", d),
                 timestamp: json_field!("timestamp", d),
                 viewcount: json_field!("viewcount", d),
-                length: json_field!("length", d)
+                length: json_field!("length", d),
+                session_headers: None
             })
         })
     }
@@ -463,9 +477,8 @@ mod tests {
     use rustc_serialize::json;
     use std::io::BufReader;
     use super::{Recording, Folder, FolderId, FolderSize};
-    use std::fs::File;
-    use std::io::Lines;
     use std::io::BufRead;
+    use std::fs::File;
 
     macro_rules! setup_test(
         ($filename:expr, $code:expr) => {
@@ -489,30 +502,6 @@ mod tests {
             }
         }
     );
-
-    impl<'a> super::FolderRef<'a> {
-        #[cfg(test)]
-        pub fn fetch(&self) -> Option<Folder> {
-            use std::io::BufReader;
-            let file = File::open(format!("testdata/folder_{}.json", self.folder_info.id)).unwrap();
-            let line = BufReader::new(file).lines().next().unwrap().unwrap();
-            let mut fldr: Folder = json::decode(&line).unwrap();
-            fldr.info = self.folder_info.clone();
-            Some(fldr)
-        }
-    }
-    impl<'a> super::RecordingRef<'a> {
-        #[cfg(test)]
-        pub fn fetch(&self) -> Option<Recording> {
-            use std::io::BufReader;
-            let file = File::open(format!("testdata/recording_{}.json", self.recording_info.program_id)).unwrap();
-            let line = BufReader::new(file).lines().next().unwrap().unwrap();
-            let mut rec: Recording = json::decode(&line).unwrap();
-            rec.info = self.recording_info.clone();
-            Some(rec)
-        }
-    }
-
 
     #[test]
     fn able_to_parse_folder() {
