@@ -255,7 +255,6 @@ pub struct Folders<'a> {
     index: usize,
     folder: &'a Folder
 }
-
 /// Iterator over recordings in a folder
 pub struct Recordings<'a> {
     index: usize,
@@ -263,13 +262,12 @@ pub struct Recordings<'a> {
 }
 
 impl<'a> Folder {
-    /// Returns Folders over this folder
+    /// Returns `Folders` over this folder
     pub fn folders(&'a self) -> Folders<'a> {
         Folders { index: 0, folder: self }
     }
-    /// Returns Recordings over this folder
+    /// Returns `Recordings` over this folder
     pub fn recordings(&'a self) -> Recordings<'a> {
-
         Recordings { index: 0, folder: self }
     }
 }
@@ -280,18 +278,24 @@ impl fmt::Display for Folder {
     }
 }
 
+fn check_len_and_return_ref<T>(index: usize, vec: &Vec<T>) -> Option<(usize, &T)> {
+    let count = vec.len();
+    if count != 0 && index < count - 1 {
+        Some((index + 1, &vec[index]))
+    }
+    else {
+        None
+    }
+}
+
 impl<'a> Iterator for Folders<'a> {
     type Item = &'a FolderInfo;
     fn next(&mut self) -> Option<Self::Item> {
-        let items = self.folder.folders.len();
-        if items!=0 && self.index < items-1 {
-            let ret = &self.folder.folders[self.index];
-            self.index += 1;
-            Some(ret)
-        }
-        else {
-            None
-        }
+        check_len_and_return_ref(self.index, &self.folder.folders)
+            .and_then(|(idx, item)| {
+                self.index = idx;
+                Some(item)
+            })
     }
     fn size_hint(&self) -> (usize, Option<usize>) {
         (0, Some(self.folder.folders.len()))
@@ -301,15 +305,11 @@ impl<'a> Iterator for Folders<'a> {
 impl<'a> Iterator for Recordings<'a> {
     type Item = &'a RecordingInfo;
     fn next(&mut self) -> Option<Self::Item> {
-        let items = self.folder.recordings.len();
-        if items!=0 && self.index < items-1 {
-            let ret = &self.folder.recordings[self.index];
-            self.index += 1;
-            Some(ret)
-        }
-        else {
-            return None
-        }
+        check_len_and_return_ref(self.index, &self.folder.recordings)
+            .and_then(|(idx, item)| {
+                self.index = idx;
+                Some(item)
+            })
     }
     fn size_hint(&self) -> (usize, Option<usize>) {
         (0, Some(self.folder.recordings.len()))
