@@ -280,7 +280,7 @@ impl fmt::Display for Folder {
 
 fn check_len_and_return_ref<T>(index: usize, vec: &Vec<T>) -> Option<(usize, &T)> {
     let count = vec.len();
-    if count != 0 && index < count - 1 {
+    if count != 0 && index < count {
         Some((index + 1, &vec[index]))
     }
     else {
