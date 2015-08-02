@@ -657,11 +657,8 @@ mod tests {
         setup_test!("testdata/root_folder.json", |f : Folder| {
             let f1 = f.find_by_name("Test folder");
             assert!(f1.is_ok());
-            assert!(f1.unwrap().is_some());
             let f2 = f.find_by_name("Does not exist");
-            println!("{:?}", f2);
-            assert!(f2.is_ok());
-            assert!(f2.unwrap().is_none());
+            assert!(f2.is_err());
         });
     }
 }
