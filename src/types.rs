@@ -41,11 +41,12 @@ macro_rules! json_field {
 
 #[derive(Debug)]
 pub enum EVError {
-    AuthenticationError(String),
-    DecoderError(String),
-    IOError(String),
-    HttpError(String),
-    FetchError
+    Authentication(String),
+    Decoder(String),
+    IO(String),
+    Http(String),
+    Fetch,
+    NotFound
 }
 impl fmt::Display for EVError {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
@@ -59,22 +60,22 @@ impl Error for EVError {
 }
 impl From<::hyper::error::Error> for EVError {
     fn from(e: ::hyper::error::Error) -> EVError {
-        EVError::HttpError(e.to_string())
+        EVError::Http(e.to_string())
     }
 }
 impl From<::std::io::Error> for EVError {
     fn from(e: ::std::io::Error) -> EVError {
-        EVError::IOError(e.to_string())
+        EVError::IO(e.to_string())
     }
 }
 impl From<::rustc_serialize::json::DecoderError> for EVError {
     fn from(e: ::rustc_serialize::json::DecoderError) -> EVError {
-        EVError::DecoderError(e.to_string())
+        EVError::Decoder(e.to_string())
     }
 }
 impl From<::std::sync::mpsc::RecvError> for EVError {
     fn from(_: ::std::sync::mpsc::RecvError) -> EVError {
-        EVError::FetchError
+        EVError::Fetch
     }
 }
 
@@ -394,12 +395,12 @@ impl Folder {
     }
     /// Recursively finds a folder under this folder with a name
     /// If multiple folders match, the returned folder is the first that was found
-    pub fn find_by_name(&self, name: &str) -> Result<Option<FolderInfo>, EVError> {
-        fn do_find(name: &str, folder: &Folder, found: Arc<AtomicBool>) -> Result<Option<FolderInfo>, EVError> {
+    pub fn find_by_name(&self, name: &str) -> Result<FolderInfo, EVError> {
+        fn do_find(name: &str, folder: &Folder, found: Arc<AtomicBool>) -> Result<FolderInfo, EVError> {
             for finfo in folder.folders() {
                 if &finfo.name == name {
                     found.store(true, Ordering::SeqCst);
-                    return Ok(Some(finfo.clone()))
+                    return Ok(finfo.clone())
                 }
             }
             let mut threads = Vec::with_capacity(folder.folders().size_hint().1.unwrap());
@@ -412,7 +413,7 @@ impl Folder {
                     let ret = match fi.fetch() {
                         Ok(fldr) => {
                             if found.load(Ordering::SeqCst) {
-                                Ok(None)
+                                Err(EVError::NotFound)
                             }
                             else {
                                 do_find(&n, &fldr, found)
@@ -426,12 +427,12 @@ impl Folder {
             }
             for (thread, rx) in threads {
                 match try!(rx.recv()) {
-                    Ok(Some(ret)) => return Ok(Some(ret)),
+                    Ok(ret) => return Ok(ret),
                     _ => {}
                 };
                 let _ = thread.join();
             }
-            Ok(None)
+            Err(EVError::NotFound)
         }
         let found = Arc::new(AtomicBool::new(false));
         do_find(name, self, found)

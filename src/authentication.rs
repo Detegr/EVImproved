@@ -31,7 +31,7 @@ pub fn login(username: &str, password: &str) -> Result<Folder, EVError> {
                     Folder::fetch_root(jar)
                 },
                 _ => {
-                    Err(EVError::AuthenticationError("Invalid username or password".into()))
+                    Err(EVError::Authentication("Invalid username or password".into()))
                 }
             }
         },
