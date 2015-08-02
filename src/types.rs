@@ -40,6 +40,7 @@ pub enum EVError {
     DecoderError(String),
     IOError(String),
     HttpError(String),
+    FetchError
 }
 impl fmt::Display for EVError {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
@@ -64,6 +65,11 @@ impl From<::std::io::Error> for EVError {
 impl From<::rustc_serialize::json::DecoderError> for EVError {
     fn from(e: ::rustc_serialize::json::DecoderError) -> EVError {
         EVError::DecoderError(e.to_string())
+    }
+}
+impl From<::std::sync::mpsc::RecvError> for EVError {
+    fn from(_: ::std::sync::mpsc::RecvError) -> EVError {
+        EVError::FetchError
     }
 }
 
@@ -177,69 +183,68 @@ impl FolderInfo {
 }
 impl Fetch for FolderInfo {
     type Output = Folder;
-    fn fetch_into(self) -> Option<Folder> {
+    fn fetch_into(self) -> Result<Folder, EVError> {
         self.fetch()
     }
     #[cfg(not(test))]
-    fn fetch(&self) -> Option<Folder> {
+    fn fetch(&self) -> Result<Folder, EVError> {
         let url = EVUrl::Folder(self.id);
         let client = Client::new();
         let res = client.get(url).headers(self.session_headers.clone().unwrap()).send();
-        res.ok().and_then(|mut res| {
+        res.map_err(EVError::from).and_then(|mut res| {
             let mut ok = String::new();
-            if let Err(_) = res.read_to_string(&mut ok) {
-                return None
-            }
-            json::decode(&ok).and_then(|mut f: Folder| {
-                f.info = self.clone();
-                for finfo in f.folders.iter_mut() {
-                    finfo.session_headers = self.session_headers.clone();
-                }
-                for rinfo in f.recordings.iter_mut() {
-                    rinfo.session_headers = self.session_headers.clone();
-                }
-                Ok(f)
-            }).ok()
+            try!(res.read_to_string(&mut ok));
+            json::decode(&ok)
+                .map_err(EVError::from)
+                .and_then(|mut f: Folder| {
+                    f.info = self.clone();
+                    for finfo in f.folders.iter_mut() {
+                        finfo.session_headers = self.session_headers.clone();
+                    }
+                    for rinfo in f.recordings.iter_mut() {
+                        rinfo.session_headers = self.session_headers.clone();
+                    }
+                    Ok(f)
+                })
         })
     }
     #[cfg(test)]
-    fn fetch(&self) -> Option<Folder> {
+    fn fetch(&self) -> Result<Folder, EVError> {
         use std::io::BufReader;
         let file = File::open(format!("testdata/folder_{}.json", self.id)).unwrap();
         let line = BufReader::new(file).lines().next().unwrap().unwrap();
         let mut fldr: Folder = json::decode(&line).unwrap();
         fldr.info = self.clone();
-        Some(fldr)
+        Ok(fldr)
     }
 }
 
 impl Fetch for RecordingInfo {
     type Output = Recording;
-    fn fetch_into(self) -> Option<Recording> {
+    fn fetch_into(self) -> Result<Recording, EVError> {
         self.fetch()
     }
     #[cfg(not(test))]
-    fn fetch(&self) -> Option<Recording> {
+    fn fetch(&self) -> Result<Recording, EVError> {
         let url = EVUrl::Program(ProgramId::ProgramId(self.program_id));
         let client = Client::new();
         let res = client.get(url).headers(self.session_headers.clone().unwrap()).send();
-        res.ok().and_then(|mut res| {
-            let mut ok = String::new();
-            if let Err(_) = res.read_to_string(&mut ok) {
-                return None
-            }
-            json::decode(&ok).ok()
-        })
+        res.map_err(EVError::from)
+            .and_then(|mut res| {
+                let mut ok = String::new();
+                try!(res.read_to_string(&mut ok).map_err(|e| EVError::from(e)));
+                json::decode(&ok).map_err(EVError::from)
+            })
     }
 
     #[cfg(test)]
-    fn fetch(&self) -> Option<Recording> {
+    fn fetch(&self) -> Result<Recording, EVError> {
         use std::io::BufReader;
         let file = File::open(format!("testdata/recording_{}.json", self.program_id)).unwrap();
         let line = BufReader::new(file).lines().next().unwrap().unwrap();
         let mut rec: Recording = json::decode(&line).unwrap();
         rec.info = self.clone();
-        Some(rec)
+        Ok(rec)
     }
 }
 
@@ -262,25 +267,25 @@ impl IntoIterator for Folder {
                 Filter<
                     Map<
                         vec::IntoIter<FolderInfo>,
-                        fn(FolderInfo) -> Option<Folder>
+                        fn(FolderInfo) -> Result<Folder, EVError>
                     >,
-                    fn(&Option<Folder>) -> bool
+                    fn(&Result<Folder, EVError>) -> bool
                 >,
                 vec::IntoIter<RecordingInfo>,
-                fn(Option<Folder>) -> vec::IntoIter<RecordingInfo>
+                fn(Result<Folder, EVError>) -> vec::IntoIter<RecordingInfo>
             >,
             vec::IntoIter<RecordingInfo>
         >;
     fn into_iter(self) -> Self::IntoIter {
         self.folders.into_iter()
-            .map(<FolderInfo as Fetch>::fetch_into as fn(FolderInfo) -> Option<Folder>)
-            .filter(Option::<Folder>::is_some as fn(&Option<Folder>) -> bool)
-            .flat_map(into_iter_unwrapper as fn(Option<Folder>) -> vec::IntoIter<RecordingInfo>)
+            .map(<FolderInfo as Fetch>::fetch_into as fn(FolderInfo) -> Result<Folder, EVError>)
+            .filter(Result::<Folder, EVError>::is_ok as fn(&Result<Folder, EVError>) -> bool)
+            .flat_map(into_iter_unwrapper as fn(Result<Folder, EVError>) -> vec::IntoIter<RecordingInfo>)
             .chain(self.recordings.into_iter())
     }
 }
-fn into_iter_unwrapper(f: Option<Folder>) -> vec::IntoIter<RecordingInfo> {
-    f.unwrap().recordings.into_iter()
+fn into_iter_unwrapper(f: Result<Folder, EVError>) -> vec::IntoIter<RecordingInfo> {
+    f.ok().unwrap().recordings.into_iter()
 }
 
 /// Iterator over folders in another folder
