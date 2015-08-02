@@ -20,6 +20,11 @@ use cookie::CookieJar;
 
 use std::iter::{Chain,Filter,FlatMap,Map};
 
+use std::sync::mpsc::{channel};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread;
+
 #[cfg(test)]
 use std::fs::File;
 #[cfg(test)]
@@ -386,6 +391,50 @@ impl Folder {
             folders: json_field!("folders", d),
             recordings: recordings,
         })
+    }
+    /// Recursively finds a folder under this folder with a name
+    /// If multiple folders match, the returned folder is the first that was found
+    pub fn find_by_name(&self, name: &str) -> Result<Option<FolderInfo>, EVError> {
+        fn do_find(name: &str, folder: &Folder, found: Arc<AtomicBool>) -> Result<Option<FolderInfo>, EVError> {
+            for finfo in folder.folders() {
+                if &finfo.name == name {
+                    found.store(true, Ordering::SeqCst);
+                    return Ok(Some(finfo.clone()))
+                }
+            }
+            let mut threads = Vec::with_capacity(folder.folders().size_hint().1.unwrap());
+            for finfo in folder.folders() {
+                let (tx, rx) = channel();
+                let fi: FolderInfo = finfo.clone();
+                let n = name.to_owned();
+                let found = found.clone();
+                let t = thread::spawn(move || {
+                    let ret = match fi.fetch() {
+                        Ok(fldr) => {
+                            if found.load(Ordering::SeqCst) {
+                                Ok(None)
+                            }
+                            else {
+                                do_find(&n, &fldr, found)
+                            }
+                        }
+                        Err(e) => Err(e)
+                    };
+                    let _ = tx.send(ret);
+                });
+                threads.push((t, rx));
+            }
+            for (thread, rx) in threads {
+                match try!(rx.recv()) {
+                    Ok(Some(ret)) => return Ok(Some(ret)),
+                    _ => {}
+                };
+                let _ = thread.join();
+            }
+            Ok(None)
+        }
+        let found = Arc::new(AtomicBool::new(false));
+        do_find(name, self, found)
     }
 }
 
