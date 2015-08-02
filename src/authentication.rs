@@ -1,15 +1,14 @@
 use hyper::client::Client;
 use hyper::header::SetCookie;
 use urls::EVUrl;
-use types::Folder;
+use types::{EVError, Folder};
 use std::io::Read;
 use url::form_urlencoded::serialize;
 use cookie::CookieJar;
-use std::error::Error;
 use headers::evimproved_headers;
 
 #[cfg(not(test))]
-pub fn login(username: &str, password: &str) -> Result<Folder, String> {
+pub fn login(username: &str, password: &str) -> Result<Folder, EVError> {
     let data = serialize(&[
                    ("username", username),
                    ("password", password),
@@ -23,7 +22,7 @@ pub fn login(username: &str, password: &str) -> Result<Folder, String> {
                 .send() {
         Ok(mut res) => {
             let mut ok = String::new();
-            try!(res.read_to_string(&mut ok).map_err(|e| String::from(e.description())));
+            try!(res.read_to_string(&mut ok));
             match &*ok {
                 "TRUE" => {
                     let mut jar = CookieJar::new(b"cookiejar");
@@ -32,11 +31,11 @@ pub fn login(username: &str, password: &str) -> Result<Folder, String> {
                     Folder::fetch_root(jar)
                 },
                 _ => {
-                    Err("Invalid username or password".into())
+                    Err(EVError::AuthenticationError("Invalid username or password".into()))
                 }
             }
         },
-        Err(e) => Err(String::from(e.description()))
+        Err(e) => Err(EVError::from(e))
     };
     ret
 }

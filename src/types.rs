@@ -34,6 +34,39 @@ macro_rules! json_field {
     }
 }
 
+#[derive(Debug)]
+pub enum EVError {
+    AuthenticationError(String),
+    DecoderError(String),
+    IOError(String),
+    HttpError(String),
+}
+impl fmt::Display for EVError {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        write!(fmt, "foo")
+    }
+}
+impl Error for EVError {
+    fn description(&self) -> &str {
+        "An error occurred"
+    }
+}
+impl From<::hyper::error::Error> for EVError {
+    fn from(e: ::hyper::error::Error) -> EVError {
+        EVError::HttpError(e.to_string())
+    }
+}
+impl From<::std::io::Error> for EVError {
+    fn from(e: ::std::io::Error) -> EVError {
+        EVError::IOError(e.to_string())
+    }
+}
+impl From<::rustc_serialize::json::DecoderError> for EVError {
+    fn from(e: ::rustc_serialize::json::DecoderError) -> EVError {
+        EVError::DecoderError(e.to_string())
+    }
+}
+
 /// Describes an id of an folder
 #[derive(Copy, Clone, Debug)]
 pub enum FolderId {
@@ -321,14 +354,14 @@ impl Folder {
     /// The `CookieJar` needs to have a valid `SetCookie` that has the session token.
     /// You probably want to use `authentication::login` instead of this function.
     #[cfg(not(test))]
-    pub fn fetch_root(jar: CookieJar) -> Result<Folder, String> {
+    pub fn fetch_root(jar: CookieJar) -> Result<Folder, EVError> {
         let headers = evimproved_headers(Some(jar));
         let client = Client::new();
         let ret = match client.get(EVUrl::Folder(FolderId::Root)).headers(headers.clone()).send() {
             Ok(mut res) => {
                 let mut ok = String::new();
-                try!(res.read_to_string(&mut ok).map_err(|e| String::from(e.description())));
-                let mut folder: Folder = try!(json::decode(&ok).map_err(|e| String::from(e.description())));
+                try!(res.read_to_string(&mut ok));
+                let mut folder: Folder = try!(json::decode(&ok));
                 for finfo in folder.folders.iter_mut() {
                     finfo.session_headers = Some(headers.clone());
                 }
@@ -337,7 +370,7 @@ impl Folder {
                 }
                 Ok(folder)
             },
-            Err(e) => Err(String::from(e.description()))
+            Err(e) => Err(EVError::from(e))
         };
         ret
     }
