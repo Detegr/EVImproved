@@ -6,6 +6,6 @@ authors = ["Antti Keränen <detegr@gmail.com>"]
 
 [dependencies]
 rustc-serialize = "*"
-hyper = "*"
-url = "*"
-cookie = "*"
+hyper = "0.6.15"
+cookie = "^0.1"
+url = "^0.2"
